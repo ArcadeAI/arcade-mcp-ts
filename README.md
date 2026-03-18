@@ -1,15 +1,15 @@
-# arcade-mcp
+# @arcadeai/arcade-mcp
 
 TypeScript MCP framework with secret injection, OAuth auth providers, multi-user support, worker routes, and middleware. Wraps the official [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) — never forks or patches it.
 
 ## Quick Start
 
 ```bash
-bun add arcade-mcp
+bun add @arcadeai/arcade-mcp
 ```
 
 ```typescript
-import { MCPApp } from "arcade-mcp";
+import { MCPApp } from "@arcadeai/arcade-mcp";
 import { z } from "zod";
 
 const app = new MCPApp({
@@ -77,7 +77,7 @@ app.tool(
 ### Tool with OAuth
 
 ```typescript
-import { auth } from "arcade-mcp";
+import { auth } from "@arcadeai/arcade-mcp";
 
 app.tool(
   "star_repo",
@@ -121,7 +121,7 @@ Any env var not prefixed with `MCP_` or `_` is available as a tool secret.
 Factory functions for 21 OAuth2 providers:
 
 ```typescript
-import { auth } from "arcade-mcp";
+import { auth } from "@arcadeai/arcade-mcp";
 
 auth.GitHub({ scopes: ["repo"] })
 auth.Google({ scopes: ["https://www.googleapis.com/auth/calendar"] })
@@ -167,7 +167,7 @@ app.tool("example", opts, async (args, context) => {
 Composable middleware with an onion model. Override any hook:
 
 ```typescript
-import { Middleware, composeMiddleware } from "arcade-mcp";
+import { Middleware, composeMiddleware } from "@arcadeai/arcade-mcp";
 
 class RateLimitMiddleware extends Middleware {
   async onCallTool(context, next) {
@@ -199,7 +199,7 @@ Built-in middleware (enabled by default):
 Validate JWT Bearer tokens against JWKS endpoints:
 
 ```typescript
-import { MCPApp, JWTResourceServerValidator } from "arcade-mcp";
+import { MCPApp, JWTResourceServerValidator } from "@arcadeai/arcade-mcp";
 
 const app = new MCPApp({
   name: "MyServer",
@@ -226,7 +226,7 @@ Supports RFC 9728 OAuth Protected Resource Metadata discovery.
 When `ARCADE_WORKER_SECRET` is set, expose tool execution endpoints for Arcade Cloud integration:
 
 ```typescript
-import { createWorkerRoutes } from "arcade-mcp";
+import { createWorkerRoutes } from "@arcadeai/arcade-mcp";
 
 const workerApp = createWorkerRoutes({
   catalog: app.catalog,
@@ -250,7 +250,7 @@ import {
   FatalToolError,
   UpstreamError,
   ContextRequiredToolError,
-} from "arcade-mcp";
+} from "@arcadeai/arcade-mcp";
 
 // Retryable error (LLM will retry)
 throw new RetryableToolError("Rate limited, try again", {
