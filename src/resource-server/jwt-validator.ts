@@ -1,5 +1,5 @@
 import * as jose from "jose";
-import pino from "pino";
+import { createLogger } from "../logger.js";
 import type { ResourceOwner } from "../types.js";
 import type {
 	AccessTokenValidationOptions,
@@ -12,7 +12,7 @@ import {
 	TokenExpiredError,
 } from "./validator.js";
 
-const logger = pino({ name: "arcade-mcp-jwt" });
+const logger = createLogger("arcade-mcp-jwt");
 
 const SUPPORTED_ALGORITHMS = new Set([
 	"RS256",

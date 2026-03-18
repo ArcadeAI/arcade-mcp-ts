@@ -1,9 +1,9 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import pino from "pino";
+import { createLogger } from "../logger.js";
 import type { ArcadeMCPServer } from "../server.js";
 import { setupGracefulShutdown } from "./shutdown.js";
 
-const logger = pino({ name: "arcade-mcp-stdio" });
+const logger = createLogger("arcade-mcp-stdio");
 
 /**
  * Run the server using stdio transport.

@@ -1,8 +1,8 @@
-import pino from "pino";
+import { createLogger } from "../logger.js";
 import type { CallNext, MiddlewareContext } from "../types.js";
 import { Middleware } from "./base.js";
 
-const logger = pino({ name: "arcade-mcp-middleware" });
+const logger = createLogger("arcade-mcp-middleware");
 
 /**
  * Logging middleware. Logs request/response timing and errors.

@@ -57,6 +57,8 @@ export {
 	type ToolExecutionResult,
 	validateInput,
 } from "./executor.js";
+// ── Logger ──────────────────────────────────────────────
+export { createLogger, type LogFormat } from "./logger.js";
 export {
 	ComponentRegistry,
 	PromptManager,

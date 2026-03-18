@@ -28,9 +28,9 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 
-import pino from "pino";
+import { createLogger } from "./logger.js";
 
-const logger = pino({ name: "arcade-mcp-telemetry" });
+const logger = createLogger("arcade-mcp-telemetry");
 
 export interface OTELHandlerOptions {
 	enable: boolean;
