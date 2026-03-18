@@ -11,6 +11,15 @@ import type { ToolAuthorization } from "./auth/types.js";
 export const TOOL_NAME_SEPARATOR = "_";
 
 /**
+ * Toolkit identity — name, optional version, and optional description.
+ */
+export interface ToolkitInfo {
+	name: string;
+	version?: string;
+	description?: string;
+}
+
+/**
  * Options passed to app.tool() for defining a tool.
  */
 export interface ToolOptions<T extends z.ZodType = z.ZodType> {
@@ -19,6 +28,7 @@ export interface ToolOptions<T extends z.ZodType = z.ZodType> {
 	auth?: ToolAuthorization;
 	secrets?: string[];
 	metadata?: Record<string, unknown>;
+	toolkit?: Partial<ToolkitInfo>;
 }
 
 /**
@@ -56,6 +66,8 @@ export interface MaterializedTool {
 	secrets?: string[];
 	metadata?: Record<string, unknown>;
 	toolkitName?: string;
+	toolkitVersion?: string;
+	toolkitDescription?: string;
 	dateAdded: Date;
 	dateUpdated: Date;
 }

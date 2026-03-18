@@ -22,6 +22,7 @@ TypeScript port of the Python `arcade-mcp` framework, published as `@arcadeai/ar
 - **`src/errors.ts`** — Tool-level error hierarchy (`ToolkitError`, `RetryableToolError`, etc.)
 - **`src/exceptions.ts`** — MCP-level exception hierarchy (`MCPError`, `ServerError`, `TransportError`, etc.)
 - **`src/settings.ts`** — Env-based settings, auto-captures non-prefixed env vars as tool secrets
+- **`src/telemetry.ts`** — `OTELHandler` for OpenTelemetry traces + metrics via OTLP HTTP
 - **`src/auth/`** — `ToolAuthorization` type + 20+ OAuth provider factory functions
 - **`src/middleware/`** — Composable middleware with method-specific hooks
 - **`src/resource-server/`** — JWT Bearer token validation for multi-user HTTP auth
@@ -59,3 +60,4 @@ The Python source of truth lives at `../arcade-mcp`. Key files:
 - `libs/arcade-core/arcade_core/auth.py` — Auth providers
 - `libs/arcade-mcp-server/arcade_mcp_server/middleware/base.py` — Middleware
 - `libs/arcade-serve/arcade_serve/fastapi/worker.py` — Worker routes
+- `libs/arcade-serve/arcade_serve/fastapi/telemetry.py` — OpenTelemetry handler

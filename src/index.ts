@@ -3,7 +3,7 @@
 // ── Auth ─────────────────────────────────────────────────
 export * as auth from "./auth/index.js";
 export type { AuthProviderType, ToolAuthorization } from "./auth/types.js";
-export { ToolCatalog, toToolDefinition } from "./catalog.js";
+export { normalizeVersion, ToolCatalog, toToolDefinition } from "./catalog.js";
 // ── CLI / Discovery ─────────────────────────────────────
 export {
 	type CLIArgs,
@@ -87,6 +87,8 @@ export { JWTResourceServerValidator } from "./resource-server/jwt-validator.js";
 export { ArcadeMCPServer } from "./server.js";
 // ── Settings ─────────────────────────────────────────────
 export { loadSettings, type MCPSettings } from "./settings.js";
+// ── Telemetry ────────────────────────────────────────────
+export { OTELHandler, type OTELHandlerOptions } from "./telemetry.js";
 export { type HttpOptions, runHttp } from "./transports/http.js";
 
 // ── Transports ───────────────────────────────────────────
@@ -110,6 +112,7 @@ export type {
 	ToolContext,
 	ToolDefinition,
 	ToolHandler,
+	ToolkitInfo,
 	ToolOptions,
 	TransportOptions,
 } from "./types.js";

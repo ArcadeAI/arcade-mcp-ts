@@ -5,6 +5,7 @@ import { PromptManager } from "./managers/prompt-manager.js";
 import { ResourceManager } from "./managers/resource-manager.js";
 import { ArcadeMCPServer } from "./server.js";
 import { loadSettings, type MCPSettings } from "./settings.js";
+import { OTELHandler } from "./telemetry.js";
 import type {
 	MaterializedTool,
 	MCPAppOptions,
@@ -15,6 +16,7 @@ import type {
 	ResourceOptions,
 	ResourceServerValidatorInterface,
 	ToolHandler,
+	ToolkitInfo,
 	ToolOptions,
 	TransportOptions,
 } from "./types.js";
@@ -45,7 +47,8 @@ export class MCPApp {
 	private _middleware: Middleware[];
 	private _auth?: ResourceServerValidatorInterface;
 	private _server?: ArcadeMCPServer;
-	private _toolkitName: string;
+	private _telemetry?: OTELHandler;
+	private _toolkitInfo: ToolkitInfo;
 
 	constructor(options: MCPAppOptions) {
 		if (!NAME_REGEX.test(options.name)) {
@@ -65,7 +68,11 @@ export class MCPApp {
 		this._settings = loadSettings();
 		this._middleware = options.middleware ?? [];
 		this._auth = options.auth;
-		this._toolkitName = options.name;
+		this._toolkitInfo = {
+			name: options.name,
+			version: options.version,
+			description: options.title ?? options.name,
+		};
 	}
 
 	/**
@@ -76,7 +83,7 @@ export class MCPApp {
 		options: ToolOptions<T>,
 		handler: ToolHandler<z.infer<T>>,
 	): this {
-		this._catalog.addTool(name, options, handler, this._toolkitName);
+		this._catalog.addTool(name, options, handler, this._toolkitInfo);
 		return this;
 	}
 
@@ -88,7 +95,7 @@ export class MCPApp {
 		module: Record<string, { options: ToolOptions; handler: ToolHandler }>,
 	): this {
 		for (const [name, def] of Object.entries(module)) {
-			this._catalog.addTool(name, def.options, def.handler, this._toolkitName);
+			this._catalog.addTool(name, def.options, def.handler, this._toolkitInfo);
 		}
 		return this;
 	}
@@ -151,6 +158,23 @@ export class MCPApp {
 				? Number.parseInt(process.env.ARCADE_SERVER_PORT, 10)
 				: 8000);
 
+		// Initialize telemetry if enabled
+		if (this._settings.telemetry.enable) {
+			this._telemetry = new OTELHandler({
+				enable: true,
+				serviceName: this._settings.telemetry.serviceName,
+				environment: this._settings.arcade.environment,
+			});
+			this._telemetry.initialize();
+
+			const shutdownTelemetry = async () => {
+				await this._telemetry?.shutdown();
+			};
+			process.on("SIGINT", shutdownTelemetry);
+			process.on("SIGTERM", shutdownTelemetry);
+			process.on("beforeExit", shutdownTelemetry);
+		}
+
 		// Create server
 		this._server = new ArcadeMCPServer(this._catalog, {
 			name: this.name,
@@ -160,6 +184,7 @@ export class MCPApp {
 			settings: this._settings,
 			middleware: this._middleware as never[],
 			auth: this._auth,
+			telemetry: this._telemetry,
 			promptManager: this._promptManager,
 			resourceManager: this._resourceManager,
 		});
