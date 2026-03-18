@@ -56,6 +56,8 @@ export class Context {
 	readonly tools: Tools;
 	readonly sampling: Sampling;
 	readonly ui: UI;
+	readonly prompts: Prompts;
+	readonly notifications: Notifications;
 
 	private _extra: ServerExtra;
 	private _toolContext: ToolContextData;
@@ -88,6 +90,8 @@ export class Context {
 		this.tools = new Tools(this);
 		this.sampling = new Sampling(this);
 		this.ui = new UI(this);
+		this.prompts = new Prompts(this);
+		this.notifications = new Notifications(this);
 	}
 
 	get signal(): AbortSignal {
@@ -159,10 +163,10 @@ export class Context {
 
 	/**
 	 * Send a notification via the MCP session.
+	 * @deprecated Use context.notifications.send() instead.
 	 */
-	async sendNotification(_notification: ServerNotification): Promise<void> {
-		// The extra object may have a sendNotification or similar method
-		// For now, we store and flush via server
+	async sendNotification(notification: ServerNotification): Promise<void> {
+		await this.notifications.send(notification);
 	}
 }
 
@@ -278,5 +282,35 @@ export class UI extends ContextComponent {
 	): Promise<unknown> {
 		// Delegate to MCP elicitation via session
 		return undefined;
+	}
+}
+
+/**
+ * Prompts facade: context.prompts.get(), .list()
+ */
+export class Prompts extends ContextComponent {
+	async get(
+		_name: string,
+		_arguments?: Record<string, string>,
+	): Promise<unknown> {
+		// Delegate to server's prompt handler via extra
+		return undefined;
+	}
+
+	async list(): Promise<unknown[]> {
+		return [];
+	}
+}
+
+/**
+ * Notifications facade: context.notifications.send()
+ */
+export class Notifications extends ContextComponent {
+	async send(notification: ServerNotification): Promise<void> {
+		try {
+			await this.ctx.extra.sendNotification?.(notification);
+		} catch {
+			// Best-effort notification delivery
+		}
 	}
 }

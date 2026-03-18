@@ -49,6 +49,14 @@ export {
 	type ToolExecutionResult,
 	validateInput,
 } from "./executor.js";
+export {
+	ComponentRegistry,
+	PromptManager,
+	type RegistrySubscriber,
+	ResourceManager,
+	type StoredPrompt,
+	type StoredResource,
+} from "./managers/index.js";
 export { MCPApp } from "./mcp-app.js";
 // ── Middleware ────────────────────────────────────────────
 export {
@@ -84,6 +92,11 @@ export type {
 	MaterializedTool,
 	MCPAppOptions,
 	MiddlewareContext,
+	PromptArgument,
+	PromptHandler,
+	PromptOptions,
+	ResourceHandler,
+	ResourceOptions,
 	ResourceOwner,
 	ResourceServerValidatorInterface,
 	ToolCallRequest,

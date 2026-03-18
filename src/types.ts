@@ -1,3 +1,7 @@
+import type {
+	GetPromptResult,
+	ReadResourceResult,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { z } from "zod";
 import type { ToolAuthorization } from "./auth/types.js";
 
@@ -103,6 +107,49 @@ export interface ToolCallRequest {
 		metadata?: Array<{ key: string; value: string }>;
 	};
 }
+
+// ── Prompt types ─────────────────────────────────────────
+
+/**
+ * A prompt argument definition.
+ */
+export interface PromptArgument {
+	name: string;
+	description?: string;
+	required?: boolean;
+}
+
+/**
+ * Options passed to app.prompt() for defining a prompt.
+ */
+export interface PromptOptions {
+	description?: string;
+	arguments?: PromptArgument[];
+}
+
+/**
+ * A prompt handler function receives string arguments and returns prompt messages.
+ */
+export type PromptHandler = (
+	args: Record<string, string>,
+) => GetPromptResult | Promise<GetPromptResult>;
+
+// ── Resource types ───────────────────────────────────────
+
+/**
+ * Options passed to app.resource() for defining a resource.
+ */
+export interface ResourceOptions {
+	description?: string;
+	mimeType?: string;
+}
+
+/**
+ * A resource handler function receives a URI and returns resource contents.
+ */
+export type ResourceHandler = (
+	uri: URL,
+) => ReadResourceResult | Promise<ReadResourceResult>;
 
 /**
  * Transport configuration for app.run().
