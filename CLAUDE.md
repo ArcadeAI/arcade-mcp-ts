@@ -1,6 +1,6 @@
-# CLAUDE.md — arcade-mcp-ts
+# CLAUDE.md — @arcadeai/arcade-mcp
 
-TypeScript port of the Python `arcade-mcp` framework. Wraps `@modelcontextprotocol/sdk` to add secret injection, OAuth auth providers, multi-user support, worker routes, and middleware.
+TypeScript port of the Python `arcade-mcp` framework, published as `@arcadeai/arcade-mcp`. Wraps `@modelcontextprotocol/sdk` to add secret injection, OAuth auth providers, multi-user support, worker routes, and middleware.
 
 ## Quick Reference
 
@@ -58,5 +58,3 @@ The Python source of truth lives at `../arcade-mcp`. Key files:
 - `libs/arcade-core/arcade_core/auth.py` — Auth providers
 - `libs/arcade-mcp-server/arcade_mcp_server/middleware/base.py` — Middleware
 - `libs/arcade-serve/arcade_serve/fastapi/worker.py` — Worker routes
-
-See `PLAN.md` for the full implementation plan.
