@@ -54,6 +54,8 @@ app.run({ transport: "http", port: 8000 });
 - **Multi-user HTTP auth** — JWT Bearer token validation via JWKS
 - **Worker routes** — `/worker/tools`, `/worker/tools/invoke`, `/worker/health`
 - **Error hierarchy** — structured errors with retry support, upstream error mapping
+- **Prompts** — `app.prompt(name, options, handler)` with argument validation and runtime management
+- **Resources** — `app.resource(uri, options, handler)` with MIME types and runtime management
 - **Dual transport** — stdio and HTTP (Elysia + StreamableHTTP)
 - **Runtime compatible** — Bun and Node.js (no `Bun.*` APIs in library code)
 
@@ -133,6 +135,68 @@ app.tool(
 ```
 
 Versions are normalized to semver — `"1"` becomes `"1.0.0"`, `"v1.2"` becomes `"1.2.0"`.
+
+## Prompts
+
+Register prompts with `app.prompt(name, options, handler?)`:
+
+```typescript
+app.prompt(
+  "greeting",
+  {
+    description: "Generate a greeting",
+    arguments: [{ name: "name", description: "Name to greet", required: true }],
+  },
+  (args) => ({
+    messages: [
+      {
+        role: "user",
+        content: { type: "text", text: `Please greet ${args.name} warmly.` },
+      },
+    ],
+  }),
+);
+```
+
+Options: `description?` and `arguments?` (array of `{ name, description?, required? }`). If no handler is provided, a default handler returns the description as a user message.
+
+Runtime management (after `app.run()`):
+
+```typescript
+app.prompts.add("new-prompt", { description: "Added at runtime" }, handler);
+app.prompts.remove("new-prompt");
+app.prompts.list(); // returns registered prompt names
+```
+
+## Resources
+
+Register resources with `app.resource(uri, options, handler?)`:
+
+```typescript
+app.resource(
+  "config://app",
+  { description: "Application configuration", mimeType: "application/json" },
+  (uri) => ({
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify({ name: "EchoServer", version: "1.0.0" }),
+      },
+    ],
+  }),
+);
+```
+
+Options: `description?` and `mimeType?`. If no handler is provided, a default handler returns empty text content.
+
+Runtime management (after `app.run()`):
+
+```typescript
+app.resources.add("data://users", { mimeType: "application/json" }, handler);
+app.resources.remove("data://users");
+app.resources.list(); // returns registered resource URIs
+```
 
 ## Auth Providers
 
