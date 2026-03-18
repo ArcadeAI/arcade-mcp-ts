@@ -44,6 +44,48 @@ Or over HTTP:
 app.run({ transport: "http", port: 8000 });
 ```
 
+## CLI Auto-Discovery
+
+Run an MCP server without writing a server file. The CLI auto-discovers tool modules in the current directory:
+
+```bash
+npx @arcadeai/arcade-mcp          # auto-discover tools, run stdio
+npx @arcadeai/arcade-mcp --http   # auto-discover tools, run HTTP
+```
+
+Tool modules are discovered from:
+- `*.tools.ts` / `*.tools.js` files (e.g., `math.tools.ts`)
+- Any file inside a `tools/` directory (e.g., `tools/greet.ts`)
+
+Each file should export tool definitions:
+
+```typescript
+// tools/greet.ts
+import { z } from "zod";
+
+export const greetTools = {
+  greet: {
+    options: {
+      description: "Greet someone",
+      parameters: z.object({ name: z.string() }),
+    },
+    handler: async (args) => `Hello, ${args.name}!`,
+  },
+};
+```
+
+CLI options:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--http` | — | Use HTTP transport (default: stdio) |
+| `--host <addr>` | `127.0.0.1` | HTTP host |
+| `--port <n>` | `8000` | HTTP port |
+| `--name <name>` | directory name | App name |
+| `--dir <path>` | cwd | Directory to scan |
+
+> **Node.js + TypeScript**: Use `npx tsx arcade-mcp` or Bun to import `.ts` tool files directly.
+
 ## Features
 
 - **Builder API** — `app.tool(name, options, handler)` with method chaining
