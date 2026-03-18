@@ -1,3 +1,4 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Elysia } from "elysia";
 import pino from "pino";
@@ -30,10 +31,13 @@ export async function runHttp(
 
 	const app = new Elysia();
 
-	// Track transports per session for multi-session support
-	const transports = new Map<
+	// Track transports and per-session McpServer instances
+	const sessions = new Map<
 		string,
-		WebStandardStreamableHTTPServerTransport
+		{
+			transport: WebStandardStreamableHTTPServerTransport;
+			mcpServer: McpServer;
+		}
 	>();
 
 	// MCP endpoint
@@ -69,7 +73,7 @@ export async function runHttp(
 		let transport: WebStandardStreamableHTTPServerTransport | undefined;
 
 		if (sessionId) {
-			transport = transports.get(sessionId);
+			transport = sessions.get(sessionId)?.transport;
 		}
 
 		// Only create new transports for POST requests (initialization)
@@ -77,18 +81,21 @@ export async function runHttp(
 			transport = new WebStandardStreamableHTTPServerTransport({
 				sessionIdGenerator: () => crypto.randomUUID(),
 				onsessioninitialized: (id: string) => {
-					transports.set(id, transport!);
+					sessions.set(id, { transport: transport!, mcpServer: sessionServer });
 				},
 			});
 
 			transport.onclose = () => {
 				const sid = transport!.sessionId;
 				if (sid) {
-					transports.delete(sid);
+					const entry = sessions.get(sid);
+					sessions.delete(sid);
+					entry?.mcpServer.close().catch(() => {});
 				}
 			};
 
-			await server.getServer().connect(transport);
+			const sessionServer = server.createSessionServer();
+			await sessionServer.connect(transport);
 		}
 
 		if (!transport) {
@@ -135,13 +142,11 @@ export async function runHttp(
 	await setupGracefulShutdown({
 		logger,
 		onShutdown: async () => {
-			// Close all active session transports
-			const closePromises = [...transports.values()].map((t) =>
-				t.close().catch(() => {}),
-			);
+			const closePromises = [...sessions.values()].map(async (entry) => {
+				await entry.transport.close().catch(() => {});
+				await entry.mcpServer.close().catch(() => {});
+			});
 			await Promise.all(closePromises);
-
-			await server.getServer().close();
 			app.stop();
 		},
 	});
