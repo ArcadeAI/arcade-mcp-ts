@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import pino from "pino";
+import { z } from "zod";
 import type { ToolCatalog } from "./catalog.js";
 import {
 	Context,
@@ -9,6 +10,8 @@ import {
 	type ToolContextData,
 } from "./context.js";
 import { runTool } from "./executor.js";
+import type { PromptManager } from "./managers/prompt-manager.js";
+import type { ResourceManager } from "./managers/resource-manager.js";
 import { applyMiddleware } from "./middleware/base.js";
 import { ErrorHandlingMiddleware } from "./middleware/error-handling.js";
 import { LoggingMiddleware } from "./middleware/logging.js";
@@ -18,6 +21,10 @@ import type {
 	MaterializedTool,
 	MiddlewareContext,
 	Middleware as MiddlewareInterface,
+	PromptHandler,
+	PromptOptions,
+	ResourceHandler,
+	ResourceOptions,
 	ResourceOwner,
 	ResourceServerValidatorInterface,
 } from "./types.js";
@@ -32,6 +39,8 @@ export interface ArcadeMCPServerOptions {
 	settings?: MCPSettings;
 	middleware?: MiddlewareInterface[];
 	auth?: ResourceServerValidatorInterface;
+	promptManager?: PromptManager;
+	resourceManager?: ResourceManager;
 }
 
 /**
@@ -44,6 +53,8 @@ export class ArcadeMCPServer {
 	private settings?: MCPSettings;
 	private middlewareChain: MiddlewareInterface[];
 	private auth?: ResourceServerValidatorInterface;
+	private promptManager?: PromptManager;
+	private resourceManager?: ResourceManager;
 	private name: string;
 	private version: string;
 
@@ -53,6 +64,8 @@ export class ArcadeMCPServer {
 		this.version = options.version;
 		this.settings = options.settings;
 		this.auth = options.auth;
+		this.promptManager = options.promptManager;
+		this.resourceManager = options.resourceManager;
 
 		// Build middleware chain
 		this.middlewareChain = [];
@@ -241,6 +254,118 @@ export class ArcadeMCPServer {
 	 */
 	addTool(tool: MaterializedTool): void {
 		this.registerTool(tool);
+	}
+
+	// ── Prompt registration ──────────────────────────────────
+
+	/**
+	 * Register all prompts from the prompt manager with the underlying McpServer.
+	 */
+	registerCatalogPrompts(): void {
+		if (!this.promptManager) return;
+		for (const prompt of this.promptManager.listPrompts()) {
+			this.registerPrompt(prompt.name, prompt);
+		}
+	}
+
+	/**
+	 * Register a single prompt with the McpServer.
+	 */
+	private registerPrompt(
+		name: string,
+		stored: {
+			description?: string;
+			arguments?: Array<{
+				name: string;
+				description?: string;
+				required?: boolean;
+			}>;
+		},
+	): void {
+		// Build Zod shape for argsSchema (SDK requires Zod types, not plain objects)
+		const argsSchema: Record<string, z.ZodType> = {};
+		if (stored.arguments) {
+			for (const arg of stored.arguments) {
+				const base = arg.description
+					? z.string().describe(arg.description)
+					: z.string();
+				argsSchema[arg.name] = arg.required ? base : base.optional();
+			}
+		}
+
+		const config: Record<string, unknown> = {
+			description: stored.description,
+		};
+		if (Object.keys(argsSchema).length > 0) {
+			config.argsSchema = argsSchema;
+		}
+
+		this.mcpServer.registerPrompt(
+			name,
+			config as never,
+			(async (args: Record<string, string>) => {
+				return this.promptManager!.getPrompt(name, args);
+			}) as never,
+		);
+	}
+
+	/**
+	 * Add a prompt at runtime.
+	 */
+	addPrompt(
+		name: string,
+		options: PromptOptions,
+		_handler?: PromptHandler,
+	): void {
+		this.registerPrompt(name, {
+			description: options.description,
+			arguments: options.arguments,
+		});
+	}
+
+	// ── Resource registration ────────────────────────────────
+
+	/**
+	 * Register all resources from the resource manager with the underlying McpServer.
+	 */
+	registerCatalogResources(): void {
+		if (!this.resourceManager) return;
+		for (const resource of this.resourceManager.listResources()) {
+			this.registerResource(resource.uri, resource.name, resource);
+		}
+	}
+
+	/**
+	 * Register a single resource with the McpServer.
+	 */
+	private registerResource(
+		uri: string,
+		name: string,
+		stored: { description?: string; mimeType?: string },
+	): void {
+		this.mcpServer.registerResource(
+			name,
+			uri,
+			{ description: stored.description, mimeType: stored.mimeType } as never,
+			(async (resourceUri: URL) => {
+				return this.resourceManager!.readResource(resourceUri.href);
+			}) as never,
+		);
+	}
+
+	/**
+	 * Add a resource at runtime.
+	 */
+	addResource(
+		uri: string,
+		name: string,
+		options: ResourceOptions,
+		_handler?: ResourceHandler,
+	): void {
+		this.registerResource(uri, name, {
+			description: options.description,
+			mimeType: options.mimeType,
+		});
 	}
 
 	/**

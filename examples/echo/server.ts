@@ -49,4 +49,39 @@ app.tool(
 	},
 );
 
+// Example prompt
+app.prompt(
+	"greeting",
+	{
+		description: "Generate a greeting",
+		arguments: [{ name: "name", description: "Name to greet", required: true }],
+	},
+	(args) => ({
+		messages: [
+			{
+				role: "user",
+				content: {
+					type: "text",
+					text: `Please greet ${args.name} warmly.`,
+				},
+			},
+		],
+	}),
+);
+
+// Example resource
+app.resource(
+	"config://app",
+	{ description: "Application configuration", mimeType: "application/json" },
+	(uri) => ({
+		contents: [
+			{
+				uri: uri.href,
+				mimeType: "application/json",
+				text: JSON.stringify({ name: "EchoServer", version: "1.0.0" }),
+			},
+		],
+	}),
+);
+
 app.run();
