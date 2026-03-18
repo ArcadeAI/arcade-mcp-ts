@@ -94,6 +94,14 @@ export interface ToolCallRequest {
 	name: string;
 	inputs?: Record<string, unknown>;
 	userId?: string;
+	context?: {
+		authorization?: {
+			token?: string;
+			userInfo?: Record<string, unknown>;
+		};
+		secrets?: Array<{ key: string; value: string }>;
+		metadata?: Array<{ key: string; value: string }>;
+	};
 }
 
 /**

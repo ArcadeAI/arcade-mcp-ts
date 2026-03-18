@@ -78,6 +78,23 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 			);
 		}
 
+		// Inject secrets declared by the tool from env, then overlay
+		// any secrets provided in the request context (caller wins)
+		const secrets: Record<string, string> = {};
+		if (tool.secrets) {
+			for (const name of tool.secrets) {
+				const value = process.env[name];
+				if (value !== undefined) {
+					secrets[name] = value;
+				}
+			}
+		}
+		if (body.context?.secrets) {
+			for (const { key, value } of body.context.secrets) {
+				secrets[key] = value;
+			}
+		}
+
 		// Create a minimal context for worker execution
 		const abortController = new AbortController();
 		const fakeExtra = {
@@ -90,7 +107,8 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 		const context = new Context(fakeExtra as never, {
 			requestId: executionId,
 			toolContext: {
-				secrets: {},
+				authToken: body.context?.authorization?.token,
+				secrets,
 				metadata: {},
 				userId: body.userId,
 			},
