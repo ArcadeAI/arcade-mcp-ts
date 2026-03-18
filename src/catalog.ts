@@ -5,8 +5,47 @@ import {
 	TOOL_NAME_SEPARATOR,
 	type ToolDefinition,
 	type ToolHandler,
+	type ToolkitInfo,
 	type ToolOptions,
 } from "./types.js";
+
+/**
+ * Semver regex — MAJOR.MINOR.PATCH with optional prerelease/build metadata.
+ */
+const SEMVER_REGEX =
+	/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+
+/**
+ * Normalize a version string to full semver.
+ * Strips leading "v"/"V", expands partial versions (e.g. "1" → "1.0.0", "1.2" → "1.2.0").
+ * Throws ToolDefinitionError on invalid input.
+ */
+export function normalizeVersion(version: string): string {
+	let v = version.trim();
+	if (v.startsWith("v") || v.startsWith("V")) {
+		v = v.slice(1);
+	}
+
+	// Expand partial versions
+	const parts = v.split(".");
+	if (parts.length === 1 && /^\d+$/.test(parts[0])) {
+		v = `${parts[0]}.0.0`;
+	} else if (
+		parts.length === 2 &&
+		/^\d+$/.test(parts[0]) &&
+		/^\d+$/.test(parts[1])
+	) {
+		v = `${parts[0]}.${parts[1]}.0`;
+	}
+
+	if (!SEMVER_REGEX.test(v)) {
+		throw new ToolDefinitionError(
+			`Invalid version '${version}': must be a valid semver string (e.g. "1.0.0")`,
+		);
+	}
+
+	return v;
+}
 
 /**
  * Stores and manages materialized tools. Build-time registry
@@ -39,8 +78,21 @@ export class ToolCatalog {
 		name: string,
 		options: ToolOptions<T>,
 		handler: ToolHandler<z.infer<T>>,
-		toolkitName?: string,
+		toolkit?: ToolkitInfo,
 	): void {
+		// Per-tool toolkit override merges with (and wins over) app-level toolkit
+		const resolved: ToolkitInfo | undefined =
+			options.toolkit && toolkit
+				? {
+						name: options.toolkit.name ?? toolkit.name,
+						version: options.toolkit.version ?? toolkit.version,
+						description: options.toolkit.description ?? toolkit.description,
+					}
+				: options.toolkit
+					? { name: options.toolkit.name ?? name, ...options.toolkit }
+					: toolkit;
+
+		const toolkitName = resolved?.name;
 		const fqn = toolkitName
 			? `${toolkitName}${TOOL_NAME_SEPARATOR}${name}`
 			: name;
@@ -58,6 +110,10 @@ export class ToolCatalog {
 			);
 		}
 
+		const normalizedVersion = resolved?.version
+			? normalizeVersion(resolved.version)
+			: undefined;
+
 		const now = new Date();
 		this.tools.set(fqn, {
 			name,
@@ -69,6 +125,8 @@ export class ToolCatalog {
 			secrets: options.secrets,
 			metadata: options.metadata,
 			toolkitName,
+			toolkitVersion: normalizedVersion,
+			toolkitDescription: resolved?.description,
 			dateAdded: now,
 			dateUpdated: now,
 		});
@@ -166,7 +224,13 @@ export function toToolDefinition(tool: MaterializedTool): ToolDefinition {
 		auth: tool.auth,
 		secrets: tool.secrets,
 		metadata: tool.metadata,
-		toolkit: tool.toolkitName ? { name: tool.toolkitName } : undefined,
+		toolkit: tool.toolkitName
+			? {
+					name: tool.toolkitName,
+					version: tool.toolkitVersion,
+					description: tool.toolkitDescription,
+				}
+			: undefined,
 	};
 }
 
