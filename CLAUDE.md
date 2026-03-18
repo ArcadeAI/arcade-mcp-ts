@@ -41,6 +41,7 @@ After any new feature, bug fix, refactor, or other code change:
 
 - **README.md** — Check if the README needs updating (new features, changed APIs, new config options, updated examples)
 - **CLAUDE.md** — Check if this file needs updating (new architecture components, changed conventions, new commands)
+- **package.json `version`** — Bump the version for any code or documentation change (semver: patch for fixes/docs, minor for features, major for breaking changes)
 
 ## Python Reference
 
