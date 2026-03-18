@@ -165,14 +165,27 @@ export class ArcadeMCPServer {
 			// Resolve auth token from Arcade Cloud for tools with auth requirements.
 			// Skipped when a token is already present (e.g. injected by worker routes).
 			if (tool.auth && !toolCtxData.authToken) {
+				_logger.debug(
+					`Tool "${tool.fullyQualifiedName}" requires auth (provider=${tool.auth.providerId}), resolving token...`,
+				);
 				const authResult = await this.resolveAuthToken(
 					tool.auth,
 					toolCtxData.userId,
 				);
-				if (authResult.error) return authResult.error;
+				if (authResult.error) {
+					_logger.debug(
+						`Auth resolution for "${tool.fullyQualifiedName}" returned error to client`,
+					);
+					return authResult.error;
+				}
 				if (authResult.token) {
+					_logger.debug(`Auth token resolved for "${tool.fullyQualifiedName}"`);
 					toolCtxData.authToken = authResult.token;
 				}
+			} else if (tool.auth && toolCtxData.authToken) {
+				_logger.debug(
+					`Tool "${tool.fullyQualifiedName}" has pre-injected auth token, skipping resolution`,
+				);
 			}
 
 			// Build Context
@@ -283,7 +296,20 @@ export class ArcadeMCPServer {
 	 * Select user ID with priority: resource owner > settings > env > session.
 	 */
 	private selectUserId(): string | undefined {
-		return this.settings?.arcade.userId ?? process.env.ARCADE_USER_ID;
+		const userId = this.settings?.arcade.userId ?? process.env.ARCADE_USER_ID;
+		if (userId) {
+			const source = this.settings?.arcade.userId
+				? process.env.ARCADE_USER_ID
+					? "ARCADE_USER_ID env var"
+					: "~/.arcade/credentials.yaml"
+				: "ARCADE_USER_ID env var";
+			_logger.debug(`Resolved userId: ${userId} (source: ${source})`);
+		} else {
+			_logger.debug(
+				"No userId resolved (checked ARCADE_USER_ID env var and ~/.arcade/credentials.yaml)",
+			);
+		}
+		return userId;
 	}
 
 	/**
@@ -310,7 +336,22 @@ export class ArcadeMCPServer {
 	private getArcadeClient(): Arcade | undefined {
 		if (this.arcadeClient) return this.arcadeClient;
 		const apiKey = this.settings?.arcade.apiKey;
-		if (!apiKey) return undefined;
+		if (!apiKey) {
+			_logger.debug(
+				"No Arcade API key found (checked ARCADE_API_KEY env var and ~/.arcade/credentials.yaml)",
+			);
+			return undefined;
+		}
+		const masked =
+			apiKey.length > 12
+				? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`
+				: "***";
+		const source = process.env.ARCADE_API_KEY
+			? "ARCADE_API_KEY env var"
+			: "~/.arcade/credentials.yaml";
+		_logger.debug(
+			`Creating Arcade client (key: ${masked}, source: ${source}, baseURL: ${this.settings?.arcade.apiUrl})`,
+		);
 		this.arcadeClient = new Arcade({
 			apiKey,
 			baseURL: this.settings?.arcade.apiUrl,
@@ -327,24 +368,24 @@ export class ArcadeMCPServer {
 		userId: string | undefined,
 	): Promise<{ token?: string; error?: CallToolResult }> {
 		if (this.settings?.arcade.authDisabled) {
+			_logger.debug("Auth resolution skipped: ARCADE_AUTH_DISABLED is set");
 			return {};
 		}
 
 		const client = this.getArcadeClient();
 		if (!client) {
 			_logger.warn(
-				"Tool requires auth but no ARCADE_API_KEY is configured. Set ARCADE_API_KEY to enable Arcade Cloud auth.",
+				"Tool requires auth but no Arcade API key is configured. " +
+					"Set ARCADE_API_KEY env var or ensure ~/.arcade/credentials.yaml has a valid access_token.",
 			);
-			return {};
-		}
-
-		if (!userId) {
 			return {
 				error: {
 					content: [
 						{
 							type: "text" as const,
-							text: "This tool requires authentication but no user ID is available. Set the ARCADE_USER_ID environment variable.",
+							text:
+								"Tool requires authentication but no Arcade API key is configured. " +
+								"Set the ARCADE_API_KEY environment variable or run `arcade login`.",
 						},
 					],
 					isError: true,
@@ -352,14 +393,63 @@ export class ArcadeMCPServer {
 			};
 		}
 
-		const response = await client.auth.authorize({
+		if (!userId) {
+			_logger.warn("Tool requires auth but no userId is available");
+			return {
+				error: {
+					content: [
+						{
+							type: "text" as const,
+							text:
+								"This tool requires authentication but no user ID is available. " +
+								"Set the ARCADE_USER_ID environment variable or run `arcade login`.",
+						},
+					],
+					isError: true,
+				},
+			};
+		}
+
+		const authRequest = {
 			user_id: userId,
 			auth_requirement: {
 				provider_id: toolAuth.providerId,
 				provider_type: toolAuth.providerType,
 				oauth2: toolAuth.scopes ? { scopes: toolAuth.scopes } : undefined,
 			},
-		});
+		};
+		_logger.debug(
+			`Requesting auth token from Arcade Cloud: provider=${toolAuth.providerId}, type=${toolAuth.providerType}, userId=${userId}, scopes=${toolAuth.scopes?.join(",") ?? "none"}`,
+		);
+
+		let response: Awaited<ReturnType<typeof client.auth.authorize>>;
+		try {
+			response = await client.auth.authorize(authRequest);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			const status = (err as { status?: number }).status;
+			_logger.error(
+				`Arcade Cloud auth request failed: ${message}${status ? ` (HTTP ${status})` : ""}`,
+			);
+			return {
+				error: {
+					content: [
+						{
+							type: "text" as const,
+							text:
+								`Arcade Cloud auth request failed${status ? ` (HTTP ${status})` : ""}: ${message}\n\n` +
+								"Check that ARCADE_API_KEY is valid and not expired. " +
+								"If using ~/.arcade/credentials.yaml, the access_token may need refreshing via `arcade login`.",
+						},
+					],
+					isError: true,
+				},
+			};
+		}
+
+		_logger.debug(
+			`Arcade Cloud auth response: status=${response.status}, hasToken=${!!response.context?.token}, hasUrl=${!!response.url}`,
+		);
 
 		if (response.status === "completed") {
 			return { token: response.context?.token ?? undefined };
@@ -378,12 +468,15 @@ export class ArcadeMCPServer {
 		}
 
 		// status === "failed" or unknown
+		_logger.warn(
+			`Authorization failed for provider "${toolAuth.providerId}": status=${response.status}`,
+		);
 		return {
 			error: {
 				content: [
 					{
 						type: "text" as const,
-						text: `Authorization failed for provider "${toolAuth.providerId}". Please try again.`,
+						text: `Authorization failed for provider "${toolAuth.providerId}" (status: ${response.status}). Please try again.`,
 					},
 				],
 				isError: true,
