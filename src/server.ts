@@ -411,9 +411,88 @@ export class ArcadeMCPServer {
 
 	/**
 	 * Get the underlying McpServer for transport connection.
+	 * Suitable for single-session transports (e.g. stdio).
 	 */
 	getServer(): McpServer {
 		return this.mcpServer;
+	}
+
+	/**
+	 * Create a fresh McpServer instance with all registered tools, prompts,
+	 * and resources. Each call returns an independent Protocol chain, so
+	 * multiple HTTP sessions can run concurrently without hitting the SDK's
+	 * "Already connected to a transport" guard.
+	 */
+	createSessionServer(): McpServer {
+		const session = new McpServer(
+			{ name: this.name, version: this.version },
+			{
+				capabilities: {
+					tools: {},
+					resources: {},
+					prompts: {},
+					logging: {},
+				},
+			},
+		);
+
+		for (const tool of this.catalog.getAll()) {
+			session.registerTool(
+				tool.fullyQualifiedName,
+				{
+					description: tool.description,
+					inputSchema: tool.parameters as never,
+				},
+				(async (args: Record<string, unknown>, extra: ServerExtra) => {
+					return this.executeTool(tool, args, extra);
+				}) as never,
+			);
+		}
+
+		if (this.promptManager) {
+			for (const prompt of this.promptManager.listPrompts()) {
+				const argsSchema: Record<string, z.ZodType> = {};
+				if (prompt.arguments) {
+					for (const arg of prompt.arguments) {
+						const base = arg.description
+							? z.string().describe(arg.description)
+							: z.string();
+						argsSchema[arg.name] = arg.required ? base : base.optional();
+					}
+				}
+				const config: Record<string, unknown> = {
+					description: prompt.description,
+				};
+				if (Object.keys(argsSchema).length > 0) {
+					config.argsSchema = argsSchema;
+				}
+				session.registerPrompt(
+					prompt.name,
+					config as never,
+					(async (args: Record<string, string>) => {
+						return this.promptManager!.getPrompt(prompt.name, args);
+					}) as never,
+				);
+			}
+		}
+
+		if (this.resourceManager) {
+			for (const resource of this.resourceManager.listResources()) {
+				session.registerResource(
+					resource.name,
+					resource.uri,
+					{
+						description: resource.description,
+						mimeType: resource.mimeType,
+					} as never,
+					(async (resourceUri: URL) => {
+						return this.resourceManager!.readResource(resourceUri.href);
+					}) as never,
+				);
+			}
+		}
+
+		return session;
 	}
 
 	/**
