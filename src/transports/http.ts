@@ -6,6 +6,7 @@ import type {
 	ResourceOwner,
 	ResourceServerValidatorInterface,
 } from "../types.js";
+import { setupGracefulShutdown } from "./shutdown.js";
 
 const logger = pino({ name: "arcade-mcp-http" });
 
@@ -18,11 +19,12 @@ export interface HttpOptions {
 /**
  * Run the server using HTTP transport with Elysia.
  * Uses WebStandardStreamableHTTPServerTransport for MCP over HTTP.
+ * Blocks until a shutdown signal is received.
  */
 export async function runHttp(
 	server: ArcadeMCPServer,
 	options?: HttpOptions,
-): Promise<Elysia> {
+): Promise<void> {
 	const host = options?.host ?? "127.0.0.1";
 	const port = options?.port ?? 8000;
 
@@ -129,5 +131,18 @@ export async function runHttp(
 	app.listen({ hostname: host, port });
 	logger.info(`Arcade MCP HTTP server listening on ${host}:${port}`);
 
-	return app;
+	// Block until shutdown signal
+	await setupGracefulShutdown({
+		logger,
+		onShutdown: async () => {
+			// Close all active session transports
+			const closePromises = [...transports.values()].map((t) =>
+				t.close().catch(() => {}),
+			);
+			await Promise.all(closePromises);
+
+			await server.getServer().close();
+			app.stop();
+		},
+	});
 }
