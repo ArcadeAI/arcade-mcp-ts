@@ -1,6 +1,6 @@
 {
 	"name": "arcade-mcp",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "TypeScript MCP framework with secret injection, OAuth auth providers, multi-user support, worker routes, and middleware",
 	"type": "module",
 	"main": "./dist/index.js",
