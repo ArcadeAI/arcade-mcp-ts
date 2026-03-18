@@ -1,0 +1,197 @@
+import type { z } from "zod";
+import { ToolCatalog } from "./catalog.js";
+import { ServerError } from "./errors.js";
+import { ArcadeMCPServer } from "./server.js";
+import { loadSettings, type MCPSettings } from "./settings.js";
+import type {
+	MaterializedTool,
+	MCPAppOptions,
+	Middleware,
+	ResourceServerValidatorInterface,
+	ToolHandler,
+	ToolOptions,
+	TransportOptions,
+} from "./types.js";
+
+const NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+)*$/;
+
+/**
+ * MCPApp — the high-level builder API for creating Arcade MCP servers.
+ *
+ * ```ts
+ * const app = new MCPApp({ name: "MyServer", version: "1.0.0" });
+ * app.tool("echo", { description: "Echo", parameters: z.object({ msg: z.string() }) },
+ *   async (args, ctx) => args.msg
+ * );
+ * app.run();
+ * ```
+ */
+export class MCPApp {
+	readonly name: string;
+	readonly version: string;
+	readonly title?: string;
+	readonly instructions?: string;
+
+	private _catalog: ToolCatalog;
+	private _settings: MCPSettings;
+	private _middleware: Middleware[];
+	private _auth?: ResourceServerValidatorInterface;
+	private _server?: ArcadeMCPServer;
+	private _toolkitName: string;
+
+	constructor(options: MCPAppOptions) {
+		if (!NAME_REGEX.test(options.name)) {
+			throw new Error(
+				`Invalid app name '${options.name}': must be alphanumeric with underscores, start with a letter, no consecutive underscores`,
+			);
+		}
+
+		this.name = options.name;
+		this.version = options.version ?? "0.1.0";
+		this.title = options.title ?? options.name;
+		this.instructions = options.instructions;
+
+		this._catalog = new ToolCatalog();
+		this._settings = loadSettings();
+		this._middleware = options.middleware ?? [];
+		this._auth = options.auth;
+		this._toolkitName = options.name;
+	}
+
+	/**
+	 * Register a tool using the builder pattern.
+	 */
+	tool<T extends z.ZodType>(
+		name: string,
+		options: ToolOptions<T>,
+		handler: ToolHandler<z.infer<T>>,
+	): this {
+		this._catalog.addTool(name, options, handler, this._toolkitName);
+		return this;
+	}
+
+	/**
+	 * Add tools from a module/object that exports tool definitions.
+	 * Each key should map to { options: ToolOptions, handler: ToolHandler }.
+	 */
+	addToolsFrom(
+		module: Record<string, { options: ToolOptions; handler: ToolHandler }>,
+	): this {
+		for (const [name, def] of Object.entries(module)) {
+			this._catalog.addTool(name, def.options, def.handler, this._toolkitName);
+		}
+		return this;
+	}
+
+	/**
+	 * Runtime tool management API.
+	 */
+	get tools(): ToolsAPI {
+		return new ToolsAPI(this);
+	}
+
+	/**
+	 * Start the server with the specified transport.
+	 */
+	async run(options?: TransportOptions): Promise<void> {
+		const transport =
+			options?.transport ??
+			(process.env.ARCADE_SERVER_TRANSPORT as "stdio" | "http") ??
+			"stdio";
+		const host = options?.host ?? process.env.ARCADE_SERVER_HOST ?? "127.0.0.1";
+		const port =
+			options?.port ??
+			(process.env.ARCADE_SERVER_PORT
+				? Number.parseInt(process.env.ARCADE_SERVER_PORT, 10)
+				: 8000);
+
+		// Create server
+		this._server = new ArcadeMCPServer(this._catalog, {
+			name: this.name,
+			version: this.version,
+			title: this.title,
+			instructions: this.instructions,
+			settings: this._settings,
+			middleware: this._middleware as never[],
+			auth: this._auth,
+		});
+
+		// Register all tools from catalog
+		this._server.registerCatalogTools();
+
+		if (transport === "stdio") {
+			const { runStdio } = await import("./transports/stdio.js");
+			await runStdio(this._server);
+		} else {
+			const { runHttp } = await import("./transports/http.js");
+			await runHttp(this._server, { host, port, auth: this._auth });
+		}
+	}
+
+	/**
+	 * Get the underlying server (available after run() is called).
+	 */
+	get server(): ArcadeMCPServer | undefined {
+		return this._server;
+	}
+
+	/**
+	 * Get the catalog (available immediately for build-time operations).
+	 */
+	get catalog(): ToolCatalog {
+		return this._catalog;
+	}
+
+	/**
+	 * Get settings.
+	 */
+	get settings(): MCPSettings {
+		return this._settings;
+	}
+}
+
+/**
+ * Runtime tools API — add/update/remove tools after server is running.
+ */
+class ToolsAPI {
+	constructor(private app: MCPApp) {}
+
+	private requireServer(): ArcadeMCPServer {
+		if (!this.app.server) {
+			throw new ServerError(
+				"Server not started. Call app.run() before managing runtime tools.",
+			);
+		}
+		return this.app.server;
+	}
+
+	add<T extends z.ZodType>(
+		name: string,
+		options: ToolOptions<T>,
+		handler: ToolHandler<z.infer<T>>,
+	): void {
+		const server = this.requireServer();
+		const now = new Date();
+		const tool: MaterializedTool = {
+			name,
+			fullyQualifiedName: name,
+			description: options.description,
+			handler: handler as ToolHandler,
+			parameters: options.parameters,
+			auth: options.auth,
+			secrets: options.secrets,
+			metadata: options.metadata,
+			dateAdded: now,
+			dateUpdated: now,
+		};
+		server.addTool(tool);
+	}
+
+	remove(name: string): boolean {
+		return this.app.catalog.removeTool(name);
+	}
+
+	list(): string[] {
+		return this.app.catalog.getToolNames();
+	}
+}

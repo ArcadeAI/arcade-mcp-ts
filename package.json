@@ -1,0 +1,40 @@
+{
+	"name": "arcade-mcp",
+	"version": "0.1.0",
+	"description": "TypeScript MCP framework with secret injection, OAuth auth providers, multi-user support, worker routes, and middleware",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "bunx biome check --write .",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.12.1",
+		"elysia": "^1.2.0",
+		"jose": "^6.0.0",
+		"pino": "^10.3.1",
+		"zod": "^3.24.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.8",
+		"@types/node": "^25.5.0",
+		"dotenv": "^17.3.1",
+		"typescript": "^5.7.0",
+		"vitest": "^4.1.0"
+	},
+	"files": [
+		"dist",
+		"src"
+	],
+	"license": "MIT"
+}
