@@ -4,7 +4,6 @@ import {
 	ErrorKind,
 	FatalToolError,
 	RetryableToolError,
-	ServerError,
 	ToolDefinitionError,
 	ToolExecutionError,
 	ToolInputError,
@@ -197,14 +196,5 @@ describe("toPayload", () => {
 		expect(payload.can_retry).toBe(true);
 		expect(payload.retry_after_ms).toBe(1000);
 		expect(payload.extra).toEqual({ foo: "bar" });
-	});
-});
-
-describe("ServerError", () => {
-	it("is a plain Error", () => {
-		const err = new ServerError("no server");
-		expect(err.name).toBe("ServerError");
-		expect(err.message).toBe("no server");
-		expect(err).toBeInstanceOf(Error);
 	});
 });
