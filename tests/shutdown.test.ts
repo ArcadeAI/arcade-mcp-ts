@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setupGracefulShutdown } from "../src/transports/shutdown.js";
 
 describe("setupGracefulShutdown", () => {
@@ -6,12 +6,14 @@ describe("setupGracefulShutdown", () => {
 
 	beforeEach(() => {
 		listeners.clear();
-		vi.spyOn(process, "on").mockImplementation((event: string, fn: (...args: unknown[]) => void) => {
-			const list = listeners.get(event) ?? [];
-			list.push(fn);
-			listeners.set(event, list);
-			return process;
-		});
+		vi.spyOn(process, "on").mockImplementation(
+			(event: string, fn: (...args: unknown[]) => void) => {
+				const list = listeners.get(event) ?? [];
+				list.push(fn);
+				listeners.set(event, list);
+				return process;
+			},
+		);
 		vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 	});
 
@@ -90,9 +92,7 @@ describe("setupGracefulShutdown", () => {
 	});
 
 	it("force quits on SIGTERM after SIGINT started shutdown", async () => {
-		const onShutdown = vi.fn().mockImplementation(
-			() => new Promise(() => {}),
-		);
+		const onShutdown = vi.fn().mockImplementation(() => new Promise(() => {}));
 		const logger = { info: vi.fn() };
 
 		setupGracefulShutdown({ logger, onShutdown });
