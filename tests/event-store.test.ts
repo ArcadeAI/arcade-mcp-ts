@@ -91,7 +91,9 @@ describe("InMemoryEventStore", () => {
 		});
 
 		expect(replayed).toHaveLength(1);
-		expect((replayed[0].message as any).params.data).toBe("a2");
+		expect(
+			(replayed[0].message as { params: { data: string } }).params.data,
+		).toBe("a2");
 	});
 
 	it("replays nothing when last event is the final event", async () => {

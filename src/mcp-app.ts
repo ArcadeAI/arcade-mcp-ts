@@ -188,7 +188,11 @@ export class MCPApp {
 		}
 
 		if (dev && transport === "http") {
-			await this._runHttpWithReload({ host, port, eventStore: options?.eventStore });
+			await this._runHttpWithReload({
+				host,
+				port,
+				eventStore: options?.eventStore,
+			});
 		} else {
 			await this._runOnce(transport, host, port, options?.eventStore);
 		}
