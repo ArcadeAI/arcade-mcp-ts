@@ -35,6 +35,13 @@ TypeScript port of the Python `arcade-mcp` framework. Wraps `@modelcontextprotoc
 - Secrets come from env vars, matched to tool's `secrets` array, injected into Context
 - Middleware uses abstract class pattern with `onCallTool`, `onListTools`, etc.
 
+## Post-Change Checklist
+
+After any new feature, bug fix, refactor, or other code change:
+
+- **README.md** — Check if the README needs updating (new features, changed APIs, new config options, updated examples)
+- **CLAUDE.md** — Check if this file needs updating (new architecture components, changed conventions, new commands)
+
 ## Python Reference
 
 The Python source of truth lives at `../arcade-mcp`. Key files:
