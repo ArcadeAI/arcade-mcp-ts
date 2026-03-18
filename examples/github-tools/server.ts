@@ -43,7 +43,7 @@ app.tool(
 	},
 );
 
-// Get repository info — uses backup token from env
+// Get repository info — requires GitHub OAuth (read-only)
 app.tool(
 	"get_repo",
 	{
@@ -52,10 +52,10 @@ app.tool(
 			owner: z.string().describe("Repository owner"),
 			repo: z.string().describe("Repository name"),
 		}),
-		secrets: ["GITHUB_TOKEN"],
+		auth: auth.GitHub(),
 	},
 	async (args, context) => {
-		const token = context.getSecret("GITHUB_TOKEN");
+		const token = context.getAuthToken();
 
 		const response = await fetch(
 			`https://api.github.com/repos/${args.owner}/${args.repo}`,
