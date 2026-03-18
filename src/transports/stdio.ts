@@ -1,6 +1,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import pino from "pino";
 import type { ArcadeMCPServer } from "../server.js";
+import { setupGracefulShutdown } from "./shutdown.js";
 
 const logger = pino({ name: "arcade-mcp-stdio" });
 
@@ -15,23 +16,20 @@ export async function runStdio(server: ArcadeMCPServer): Promise<void> {
 
 	await server.getServer().connect(transport);
 
-	// Keep process alive until transport closes
-	await new Promise<void>((resolve) => {
+	// Resolve on normal client disconnect OR signal-triggered shutdown
+	const transportClosed = new Promise<void>((resolve) => {
 		transport.onclose = () => {
 			logger.info("Stdio transport closed");
 			resolve();
 		};
-
-		// Handle process signals
-		const cleanup = () => {
-			server
-				.getServer()
-				.close()
-				.then(() => resolve())
-				.catch(() => resolve());
-		};
-
-		process.on("SIGINT", cleanup);
-		process.on("SIGTERM", cleanup);
 	});
+
+	const shutdownRequested = setupGracefulShutdown({
+		logger,
+		onShutdown: async () => {
+			await server.getServer().close();
+		},
+	});
+
+	await Promise.race([transportClosed, shutdownRequested]);
 }

@@ -57,6 +57,7 @@ export { loadSettings, type MCPSettings } from "./settings.js";
 export { type HttpOptions, runHttp } from "./transports/http.js";
 
 // ── Transports ───────────────────────────────────────────
+export { setupGracefulShutdown } from "./transports/shutdown.js";
 export { runStdio } from "./transports/stdio.js";
 // ── Types ────────────────────────────────────────────────
 export type {
