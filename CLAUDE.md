@@ -22,6 +22,7 @@ TypeScript port of the Python `arcade-mcp` framework, published as `@arcadeai/ar
 - **`src/executor.ts`** — Tool execution pipeline (Zod validation, context injection, error handling)
 - **`src/errors.ts`** — Tool-level error hierarchy (`ToolkitError`, `RetryableToolError`, etc.)
 - **`src/exceptions.ts`** — MCP-level exception hierarchy (`MCPError`, `ServerError`, `TransportError`, etc.)
+- **`src/event-store.ts`** — `EventStore` interface re-export + `InMemoryEventStore` for stream resumability
 - **`src/settings.ts`** — Env-based settings, auto-captures non-prefixed env vars as tool secrets
 - **`src/telemetry.ts`** — `OTELHandler` for OpenTelemetry traces + metrics via OTLP HTTP
 - **`src/auth/`** — `ToolAuthorization` type + 20+ OAuth provider factory functions

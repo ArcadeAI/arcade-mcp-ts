@@ -34,6 +34,13 @@ export {
 	UpstreamError,
 	UpstreamRateLimitError,
 } from "./errors.js";
+// ── Event Store ──────────────────────────────────────────
+export {
+	type EventId,
+	type EventStore,
+	InMemoryEventStore,
+	type StreamId,
+} from "./event-store.js";
 // ── MCP Exceptions ──────────────────────────────────────
 export {
 	AuthorizationError,
