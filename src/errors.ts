@@ -10,12 +10,17 @@ export enum ErrorKind {
 	TOOL_DEFINITION_BAD_INPUT_SCHEMA = "tool_definition_bad_input_schema",
 	TOOL_DEFINITION_BAD_OUTPUT_SCHEMA = "tool_definition_bad_output_schema",
 
+	// Tool serialization errors
+	TOOL_SERIALIZATION = "tool_serialization",
+
 	// Tool runtime errors
 	TOOL_RUNTIME_BAD_INPUT_VALUE = "tool_runtime_bad_input_value",
 	TOOL_RUNTIME_BAD_OUTPUT_VALUE = "tool_runtime_bad_output_value",
 	TOOL_RUNTIME_RETRY = "tool_runtime_retry",
 	TOOL_RUNTIME_CONTEXT_REQUIRED = "tool_runtime_context_required",
 	TOOL_RUNTIME_FATAL = "tool_runtime_fatal",
+	TOOL_RUNTIME_EXECUTION = "tool_runtime_execution",
+	TOOL_RUNTIME_RESPONSE_EXTRACTION = "tool_runtime_response_extraction",
 
 	// Upstream errors
 	UPSTREAM_RUNTIME_BAD_REQUEST = "upstream_runtime_bad_request",
@@ -129,6 +134,13 @@ export class ToolOutputSchemaError extends ToolDefinitionError {
 }
 
 /**
+ * Input/output marshaling failure (serialization/deserialization).
+ */
+export class ToolSerializationError extends ToolError {
+	readonly kind = ErrorKind.TOOL_SERIALIZATION;
+}
+
+/**
  * Abstract base for runtime tool errors.
  */
 export abstract class ToolRuntimeError extends ToolError {
@@ -171,6 +183,22 @@ export class ContextRequiredToolError extends ToolRuntimeError {
  */
 export class FatalToolError extends ToolRuntimeError {
 	readonly kind = ErrorKind.TOOL_RUNTIME_FATAL;
+	override readonly statusCode = 500;
+}
+
+/**
+ * Tool handler function threw during execution.
+ */
+export class ToolExecutionError extends ToolRuntimeError {
+	readonly kind = ErrorKind.TOOL_RUNTIME_EXECUTION;
+	override readonly statusCode = 500;
+}
+
+/**
+ * Failed to extract/structure the tool's response into the expected output type.
+ */
+export class ToolResponseExtractionError extends ToolRuntimeError {
+	readonly kind = ErrorKind.TOOL_RUNTIME_RESPONSE_EXTRACTION;
 	override readonly statusCode = 500;
 }
 

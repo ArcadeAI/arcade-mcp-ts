@@ -6,11 +6,14 @@ import {
 	RetryableToolError,
 	ServerError,
 	ToolDefinitionError,
+	ToolExecutionError,
 	ToolInputError,
 	ToolInputSchemaError,
 	ToolkitLoadError,
 	ToolOutputError,
 	ToolOutputSchemaError,
+	ToolResponseExtractionError,
+	ToolSerializationError,
 	UpstreamError,
 	UpstreamRateLimitError,
 } from "../src/errors.js";
@@ -60,6 +63,15 @@ describe("ToolDefinitionError hierarchy", () => {
 	});
 });
 
+describe("ToolSerializationError", () => {
+	it("has correct kind and name", () => {
+		const err = new ToolSerializationError("marshal failed");
+		expect(err.kind).toBe(ErrorKind.TOOL_SERIALIZATION);
+		expect(err.name).toBe("ToolSerializationError");
+		expect(err.isToolError).toBe(true);
+	});
+});
+
 describe("ToolInputError", () => {
 	it("has correct kind and statusCode", () => {
 		const err = new ToolInputError("bad input");
@@ -98,6 +110,24 @@ describe("FatalToolError", () => {
 	it("has correct kind and statusCode", () => {
 		const err = new FatalToolError("fatal");
 		expect(err.kind).toBe(ErrorKind.TOOL_RUNTIME_FATAL);
+		expect(err.statusCode).toBe(500);
+	});
+});
+
+describe("ToolExecutionError", () => {
+	it("has correct kind and statusCode", () => {
+		const err = new ToolExecutionError("handler threw");
+		expect(err.kind).toBe(ErrorKind.TOOL_RUNTIME_EXECUTION);
+		expect(err.name).toBe("ToolExecutionError");
+		expect(err.statusCode).toBe(500);
+	});
+});
+
+describe("ToolResponseExtractionError", () => {
+	it("has correct kind and statusCode", () => {
+		const err = new ToolResponseExtractionError("bad response shape");
+		expect(err.kind).toBe(ErrorKind.TOOL_RUNTIME_RESPONSE_EXTRACTION);
+		expect(err.name).toBe("ToolResponseExtractionError");
 		expect(err.statusCode).toBe(500);
 	});
 });
