@@ -18,7 +18,8 @@ TypeScript port of the Python `arcade-mcp` framework. Wraps `@modelcontextprotoc
 - **`src/context.ts`** — `Context` with namespaced facades (log, progress, sampling, ui, etc.)
 - **`src/catalog.ts`** — `ToolCatalog` + `MaterializedTool` storage
 - **`src/executor.ts`** — Tool execution pipeline (Zod validation, context injection, error handling)
-- **`src/errors.ts`** — Error hierarchy (`ToolkitError`, `RetryableToolError`, etc.)
+- **`src/errors.ts`** — Tool-level error hierarchy (`ToolkitError`, `RetryableToolError`, etc.)
+- **`src/exceptions.ts`** — MCP-level exception hierarchy (`MCPError`, `ServerError`, `TransportError`, etc.)
 - **`src/settings.ts`** — Env-based settings, auto-captures non-prefixed env vars as tool secrets
 - **`src/auth/`** — `ToolAuthorization` type + 20+ OAuth provider factory functions
 - **`src/middleware/`** — Composable middleware with method-specific hooks
@@ -34,6 +35,7 @@ TypeScript port of the Python `arcade-mcp` framework. Wraps `@modelcontextprotoc
 - Builder pattern for tool registration: `app.tool(name, opts, handler)`
 - Secrets come from env vars, matched to tool's `secrets` array, injected into Context
 - Middleware uses abstract class pattern with `onCallTool`, `onListTools`, etc.
+- Never throw generic `Error` — always use a specific error class from `src/errors.ts` (tool errors) or `src/exceptions.ts` (MCP errors)
 - New major features or API additions should include an example under `examples/`
 
 ## Post-Change Checklist
