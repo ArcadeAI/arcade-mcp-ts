@@ -4,6 +4,7 @@ import type {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { z } from "zod";
 import type { ToolAuthorization } from "./auth/types.js";
+import type { EventStore } from "./event-store.js";
 
 /**
  * Separator between toolkit name and tool name in fully-qualified names.
@@ -171,6 +172,7 @@ export interface TransportOptions {
 	host?: string;
 	port?: number;
 	dev?: boolean;
+	eventStore?: EventStore;
 }
 
 /**

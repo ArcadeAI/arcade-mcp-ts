@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Elysia } from "elysia";
+import type { EventStore } from "../event-store.js";
 import { createLogger } from "../logger.js";
 import type { ArcadeMCPServer } from "../server.js";
 import type {
@@ -15,6 +16,7 @@ export interface HttpOptions {
 	host?: string;
 	port?: number;
 	auth?: ResourceServerValidatorInterface;
+	eventStore?: EventStore;
 }
 
 /**
@@ -87,6 +89,7 @@ export async function startHttp(
 		if (!transport && request.method === "POST") {
 			transport = new WebStandardStreamableHTTPServerTransport({
 				sessionIdGenerator: () => crypto.randomUUID(),
+				eventStore: options?.eventStore,
 				onsessioninitialized: (id: string) => {
 					sessions.set(id, { transport: transport!, mcpServer: sessionServer });
 				},

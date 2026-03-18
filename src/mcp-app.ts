@@ -188,9 +188,13 @@ export class MCPApp {
 		}
 
 		if (dev && transport === "http") {
-			await this._runHttpWithReload({ host, port });
+			await this._runHttpWithReload({
+				host,
+				port,
+				eventStore: options?.eventStore,
+			});
 		} else {
-			await this._runOnce(transport, host, port);
+			await this._runOnce(transport, host, port, options?.eventStore);
 		}
 	}
 
@@ -201,6 +205,7 @@ export class MCPApp {
 		transport: "stdio" | "http",
 		host: string,
 		port: number,
+		eventStore?: import("./event-store.js").EventStore,
 	): Promise<void> {
 		this._server = this._createServer();
 
@@ -209,7 +214,7 @@ export class MCPApp {
 			await runStdio(this._server);
 		} else {
 			const { runHttp } = await import("./transports/http.js");
-			await runHttp(this._server, { host, port, auth: this._auth });
+			await runHttp(this._server, { host, port, auth: this._auth, eventStore });
 		}
 	}
 
@@ -243,6 +248,7 @@ export class MCPApp {
 	private async _runHttpWithReload(options: {
 		host: string;
 		port: number;
+		eventStore?: import("./event-store.js").EventStore;
 	}): Promise<void> {
 		const { startHttp } = await import("./transports/http.js");
 		const { watchForChanges } = await import("./transports/dev-reload.js");

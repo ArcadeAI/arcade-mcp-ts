@@ -120,6 +120,7 @@ You can also enable dev mode via the `ARCADE_SERVER_RELOAD=1` environment variab
 - **Prompts** — `app.prompt(name, options, handler)` with argument validation and runtime management
 - **Resources** — `app.resource(uri, options, handler)` with MIME types and runtime management
 - **Dev mode** — auto-reload on file changes with `--dev` flag (HTTP only)
+- **Resumable streams** — optional event store for HTTP stream resumability via `Last-Event-ID`
 - **Dual transport** — stdio and HTTP (Elysia + StreamableHTTP)
 - **Runtime compatible** — Bun and Node.js (no `Bun.*` APIs in library code)
 
@@ -366,6 +367,40 @@ app.run({ transport: "http", port: 8000 });
 ```
 
 Supports RFC 9728 OAuth Protected Resource Metadata discovery.
+
+## Resumable Streams
+
+Enable HTTP stream resumability so disconnected clients can resume from where they left off using the `Last-Event-ID` header:
+
+```typescript
+import { MCPApp, InMemoryEventStore } from "@arcadeai/arcade-mcp";
+
+const app = new MCPApp({ name: "MyServer", version: "1.0.0" });
+
+app.run({
+  transport: "http",
+  eventStore: new InMemoryEventStore(),
+});
+```
+
+The `InMemoryEventStore` is suitable for single-process deployments. For distributed systems, implement the `EventStore` interface with a persistent backend:
+
+```typescript
+import type { EventStore, EventId, StreamId } from "@arcadeai/arcade-mcp";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+
+class RedisEventStore implements EventStore {
+  async storeEvent(streamId: StreamId, message: JSONRPCMessage): Promise<EventId> {
+    // Store in Redis...
+  }
+  async replayEventsAfter(
+    lastEventId: EventId,
+    { send }: { send: (eventId: EventId, message: JSONRPCMessage) => Promise<void> },
+  ): Promise<StreamId> {
+    // Replay from Redis...
+  }
+}
+```
 
 ## Worker Routes
 
