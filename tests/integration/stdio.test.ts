@@ -57,6 +57,47 @@ describe("Stdio integration", () => {
 		});
 		expect(errorResult.isError).toBe(true);
 
+		// ── Prompts ──────────────────────────────────────────
+
+		// List prompts
+		const promptsList = await client.listPrompts();
+		expect(promptsList.prompts.length).toBeGreaterThanOrEqual(1);
+		const promptNames = promptsList.prompts.map((p) => p.name);
+		expect(promptNames).toContain("greeting");
+
+		// Get prompt
+		const promptResult = await client.getPrompt({
+			name: "greeting",
+			arguments: { name: "Alice" },
+		});
+		expect(promptResult.messages).toHaveLength(1);
+		expect(promptResult.messages[0].role).toBe("user");
+		expect(promptResult.messages[0].content).toEqual({
+			type: "text",
+			text: "Please greet Alice warmly.",
+		});
+
+		// ── Resources ────────────────────────────────────────
+
+		// List resources
+		const resourcesList = await client.listResources();
+		expect(resourcesList.resources.length).toBeGreaterThanOrEqual(1);
+		const resourceUris = resourcesList.resources.map((r) => r.uri);
+		expect(resourceUris).toContain("config://app");
+
+		// Read resource
+		const resourceResult = await client.readResource({
+			uri: "config://app",
+		});
+		expect(resourceResult.contents).toHaveLength(1);
+		expect(resourceResult.contents[0].uri).toBe("config://app");
+		expect(
+			JSON.parse((resourceResult.contents[0] as { text: string }).text),
+		).toEqual({
+			name: "EchoServer",
+			version: "1.0.0",
+		});
+
 		await client.close();
 	}, 15000);
 });

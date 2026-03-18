@@ -119,4 +119,92 @@ describe("MCPApp", () => {
 			),
 		).toThrow("Server not started");
 	});
+
+	// ── Prompt registration ──────────────────────────────────
+
+	it("registers prompts via builder pattern", () => {
+		const app = new MCPApp({ name: "Test" });
+
+		app.prompt("greeting", { description: "A greeting" }, (args) => ({
+			messages: [
+				{
+					role: "user",
+					content: { type: "text", text: `Hello ${args.name}` },
+				},
+			],
+		}));
+
+		expect(app.promptManager.listPrompts()).toHaveLength(1);
+		expect(app.promptManager.getPromptNames()).toEqual(["greeting"]);
+	});
+
+	it("prompt() supports method chaining", () => {
+		const app = new MCPApp({ name: "Test" });
+
+		const result = app
+			.prompt("a", { description: "A" })
+			.prompt("b", { description: "B" });
+
+		expect(result).toBe(app);
+		expect(app.promptManager.listPrompts()).toHaveLength(2);
+	});
+
+	it("prompts.add() throws before run()", () => {
+		const app = new MCPApp({ name: "Test" });
+		expect(() => app.prompts.add("test", { description: "Test" })).toThrow(
+			"Server not started",
+		);
+	});
+
+	// ── Resource registration ────────────────────────────────
+
+	it("registers resources via builder pattern", () => {
+		const app = new MCPApp({ name: "Test" });
+
+		app.resource("file:///config.json", { description: "Config" }, (uri) => ({
+			contents: [{ uri: uri.href, text: "{}" }],
+		}));
+
+		expect(app.resourceManager.listResources()).toHaveLength(1);
+		expect(app.resourceManager.getResourceUris()).toEqual([
+			"file:///config.json",
+		]);
+	});
+
+	it("resource() supports method chaining", () => {
+		const app = new MCPApp({ name: "Test" });
+
+		const result = app
+			.resource("file:///a", { description: "A" })
+			.resource("file:///b", { description: "B" });
+
+		expect(result).toBe(app);
+		expect(app.resourceManager.listResources()).toHaveLength(2);
+	});
+
+	it("resources.add() throws before run()", () => {
+		const app = new MCPApp({ name: "Test" });
+		expect(() =>
+			app.resources.add("file:///test", { description: "Test" }),
+		).toThrow("Server not started");
+	});
+
+	// ── Mixed registration ───────────────────────────────────
+
+	it("chains tools, prompts, and resources together", () => {
+		const app = new MCPApp({ name: "Test" });
+
+		app
+			.tool(
+				"echo",
+				{ description: "Echo", parameters: z.object({ msg: z.string() }) },
+				async (args) => args.msg,
+			)
+			.prompt("greeting", { description: "Greet" })
+			.resource("file:///config", { description: "Config" });
+
+		expect(app.catalog.size).toBe(1);
+		expect(app.promptManager.listPrompts()).toHaveLength(1);
+		expect(app.resourceManager.listResources()).toHaveLength(1);
+	});
 });

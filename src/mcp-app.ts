@@ -1,12 +1,18 @@
 import type { z } from "zod";
 import { ToolCatalog } from "./catalog.js";
 import { ServerError } from "./exceptions.js";
+import { PromptManager } from "./managers/prompt-manager.js";
+import { ResourceManager } from "./managers/resource-manager.js";
 import { ArcadeMCPServer } from "./server.js";
 import { loadSettings, type MCPSettings } from "./settings.js";
 import type {
 	MaterializedTool,
 	MCPAppOptions,
 	Middleware,
+	PromptHandler,
+	PromptOptions,
+	ResourceHandler,
+	ResourceOptions,
 	ResourceServerValidatorInterface,
 	ToolHandler,
 	ToolOptions,
@@ -33,6 +39,8 @@ export class MCPApp {
 	readonly instructions?: string;
 
 	private _catalog: ToolCatalog;
+	private _promptManager: PromptManager;
+	private _resourceManager: ResourceManager;
 	private _settings: MCPSettings;
 	private _middleware: Middleware[];
 	private _auth?: ResourceServerValidatorInterface;
@@ -52,6 +60,8 @@ export class MCPApp {
 		this.instructions = options.instructions;
 
 		this._catalog = new ToolCatalog();
+		this._promptManager = new PromptManager();
+		this._resourceManager = new ResourceManager();
 		this._settings = loadSettings();
 		this._middleware = options.middleware ?? [];
 		this._auth = options.auth;
@@ -84,10 +94,46 @@ export class MCPApp {
 	}
 
 	/**
+	 * Register a prompt using the builder pattern.
+	 */
+	prompt(name: string, options: PromptOptions, handler?: PromptHandler): this {
+		this._promptManager.addPrompt(name, options, handler);
+		return this;
+	}
+
+	/**
+	 * Register a resource using the builder pattern.
+	 */
+	resource(
+		uri: string,
+		options: ResourceOptions,
+		handler?: ResourceHandler,
+	): this {
+		// Derive a name from the URI if not provided
+		const name = uri;
+		this._resourceManager.addResource(uri, name, options, handler);
+		return this;
+	}
+
+	/**
 	 * Runtime tool management API.
 	 */
 	get tools(): ToolsAPI {
 		return new ToolsAPI(this);
+	}
+
+	/**
+	 * Runtime prompt management API.
+	 */
+	get prompts(): PromptsAPI {
+		return new PromptsAPI(this);
+	}
+
+	/**
+	 * Runtime resource management API.
+	 */
+	get resources(): ResourcesAPI {
+		return new ResourcesAPI(this);
 	}
 
 	/**
@@ -114,10 +160,14 @@ export class MCPApp {
 			settings: this._settings,
 			middleware: this._middleware as never[],
 			auth: this._auth,
+			promptManager: this._promptManager,
+			resourceManager: this._resourceManager,
 		});
 
-		// Register all tools from catalog
+		// Register all components from catalogs/managers
 		this._server.registerCatalogTools();
+		this._server.registerCatalogPrompts();
+		this._server.registerCatalogResources();
 
 		if (transport === "stdio") {
 			const { runStdio } = await import("./transports/stdio.js");
@@ -147,6 +197,20 @@ export class MCPApp {
 	 */
 	get settings(): MCPSettings {
 		return this._settings;
+	}
+
+	/**
+	 * Get the prompt manager (available immediately for build-time operations).
+	 */
+	get promptManager(): PromptManager {
+		return this._promptManager;
+	}
+
+	/**
+	 * Get the resource manager (available immediately for build-time operations).
+	 */
+	get resourceManager(): ResourceManager {
+		return this._resourceManager;
 	}
 }
 
@@ -193,5 +257,76 @@ class ToolsAPI {
 
 	list(): string[] {
 		return this.app.catalog.getToolNames();
+	}
+}
+
+/**
+ * Runtime prompts API — add/remove/list prompts after server is running.
+ */
+class PromptsAPI {
+	constructor(private app: MCPApp) {}
+
+	private requireServer(): ArcadeMCPServer {
+		if (!this.app.server) {
+			throw new ServerError(
+				"Server not started. Call app.run() before managing runtime prompts.",
+			);
+		}
+		return this.app.server;
+	}
+
+	add(name: string, options: PromptOptions, handler?: PromptHandler): void {
+		const server = this.requireServer();
+		this.app.promptManager.addPrompt(name, options, handler);
+		server.addPrompt(name, options, handler);
+	}
+
+	remove(name: string): boolean {
+		try {
+			this.app.promptManager.removePrompt(name);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	list(): string[] {
+		return this.app.promptManager.getPromptNames();
+	}
+}
+
+/**
+ * Runtime resources API — add/remove/list resources after server is running.
+ */
+class ResourcesAPI {
+	constructor(private app: MCPApp) {}
+
+	private requireServer(): ArcadeMCPServer {
+		if (!this.app.server) {
+			throw new ServerError(
+				"Server not started. Call app.run() before managing runtime resources.",
+			);
+		}
+		return this.app.server;
+	}
+
+	add(uri: string, options: ResourceOptions, handler?: ResourceHandler): void {
+		const server = this.requireServer();
+		const name = uri;
+		this.app.resourceManager.addResource(uri, name, options, handler);
+		server.addResource(uri, name, options, handler);
+	}
+
+	remove(uri: string): boolean {
+		try {
+			this.app.resourceManager.removeResource(uri);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	list(): string[] {
+		return this.app.resourceManager.getResourceUris();
 	}
 }
