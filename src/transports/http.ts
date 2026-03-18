@@ -1,4 +1,4 @@
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Elysia } from "elysia";
 import pino from "pino";
 import type { ArcadeMCPServer } from "../server.js";
@@ -17,7 +17,7 @@ export interface HttpOptions {
 
 /**
  * Run the server using HTTP transport with Elysia.
- * Uses StreamableHTTPServerTransport for MCP over HTTP.
+ * Uses WebStandardStreamableHTTPServerTransport for MCP over HTTP.
  */
 export async function runHttp(
 	server: ArcadeMCPServer,
@@ -28,8 +28,11 @@ export async function runHttp(
 
 	const app = new Elysia();
 
-	// Track transports per session
-	const transports = new Map<string, StreamableHTTPServerTransport>();
+	// Track transports per session for multi-session support
+	const transports = new Map<
+		string,
+		WebStandardStreamableHTTPServerTransport
+	>();
 
 	// MCP endpoint
 	app.all("/mcp", async ({ request }) => {
@@ -59,101 +62,55 @@ export async function runHttp(
 			}
 		}
 
-		// Handle based on method
-		if (request.method === "POST") {
-			const body = await request.json();
+		// Look up existing session transport
+		const sessionId = request.headers.get("mcp-session-id");
+		let transport: WebStandardStreamableHTTPServerTransport | undefined;
 
-			// Check for existing session
-			const sessionId = request.headers.get("mcp-session-id");
-			let transport: StreamableHTTPServerTransport;
+		if (sessionId) {
+			transport = transports.get(sessionId);
+		}
 
-			if (sessionId && transports.has(sessionId)) {
-				transport = transports.get(sessionId)!;
-			} else {
-				// Create new transport for this session
-				transport = new StreamableHTTPServerTransport({
-					sessionIdGenerator: () => crypto.randomUUID(),
-				});
+		// Only create new transports for POST requests (initialization)
+		if (!transport && request.method === "POST") {
+			transport = new WebStandardStreamableHTTPServerTransport({
+				sessionIdGenerator: () => crypto.randomUUID(),
+				onsessioninitialized: (id: string) => {
+					transports.set(id, transport!);
+				},
+			});
 
-				// Connect to server
-				await server.getServer().connect(transport);
-
-				transport.onclose = () => {
-					if (transport.sessionId) {
-						transports.delete(transport.sessionId);
-					}
-				};
-
-				if (transport.sessionId) {
-					transports.set(transport.sessionId, transport);
+			transport.onclose = () => {
+				const sid = transport!.sessionId;
+				if (sid) {
+					transports.delete(sid);
 				}
-			}
-
-			// Create Node.js-like req/res for the transport
-			const { writable } = new TransformStream();
-			const writer = writable.getWriter();
-
-			// Convert to IncomingMessage-like object for SDK
-			const headers: Record<string, string> = {};
-			request.headers.forEach((value, key) => {
-				headers[key] = value;
-			});
-
-			// Inject resource owner as auth info
-			const req = {
-				method: request.method,
-				url: new URL(request.url).pathname,
-				headers,
-				body,
-				auth: resourceOwner ? { ...resourceOwner } : undefined,
 			};
 
-			const responseHeaders: Record<string, string> = {};
-			let statusCode = 200;
-			let responseBody = "";
+			await server.getServer().connect(transport);
+		}
 
-			const res = {
-				writeHead: (code: number, hdrs?: Record<string, string>) => {
-					statusCode = code;
-					if (hdrs) Object.assign(responseHeaders, hdrs);
-					return res;
-				},
-				setHeader: (name: string, value: string) => {
-					responseHeaders[name] = value;
-				},
-				getHeader: (name: string) => responseHeaders[name],
-				write: (chunk: string) => {
-					responseBody += chunk;
-					return true;
-				},
-				end: (chunk?: string) => {
-					if (chunk) responseBody += chunk;
-					writer.close().catch(() => {});
-				},
-				on: () => res,
-				flushHeaders: () => {},
-			};
-
-			await transport.handleRequest(req as never, res as never, body);
-
-			return new Response(responseBody || null, {
-				status: statusCode,
-				headers: responseHeaders,
+		if (!transport) {
+			return new Response(JSON.stringify({ error: "Session not found" }), {
+				status: 404,
+				headers: { "Content-Type": "application/json" },
 			});
 		}
 
-		// DELETE — close session
-		if (request.method === "DELETE") {
-			const sessionId = request.headers.get("mcp-session-id");
-			if (sessionId && transports.has(sessionId)) {
-				const transport = transports.get(sessionId)!;
-				await transport.close();
-				transports.delete(sessionId);
-			}
-			return new Response(null, { status: 204 });
-		}
-
-		return new Response("Method not allowed", { status: 405 });
+		// Delegate to the web standard transport
+		return transport.handleRequest(request, {
+			authInfo: resourceOwner
+				? {
+						token: "",
+						clientId: resourceOwner.clientId ?? "",
+						scopes: [],
+						extra: {
+							userId: resourceOwner.userId,
+							email: resourceOwner.email,
+							claims: resourceOwner.claims,
+						},
+					}
+				: undefined,
+		});
 	});
 
 	// OAuth discovery endpoint (RFC 9728)
