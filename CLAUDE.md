@@ -13,6 +13,7 @@ TypeScript port of the Python `arcade-mcp` framework, published as `@arcadeai/ar
 
 ## Architecture
 
+- **`src/cli.ts`** — CLI entry point with auto-discovery (`npx @arcadeai/arcade-mcp`)
 - **`src/mcp-app.ts`** — `MCPApp` high-level builder API (entry point for users)
 - **`src/server.ts`** — `ArcadeMCPServer` wrapping SDK's `McpServer`
 - **`src/context.ts`** — `Context` with namespaced facades (log, progress, sampling, ui, etc.)

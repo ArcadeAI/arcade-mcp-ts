@@ -4,6 +4,14 @@
 export * as auth from "./auth/index.js";
 export type { AuthProviderType, ToolAuthorization } from "./auth/types.js";
 export { normalizeVersion, ToolCatalog, toToolDefinition } from "./catalog.js";
+// ── CLI / Discovery ─────────────────────────────────────
+export {
+	type CLIArgs,
+	discoverToolModules,
+	isToolExport,
+	loadToolModules,
+	parseArgs,
+} from "./cli.js";
 export { Context, getCurrentContext, setCurrentContext } from "./context.js";
 // ── Errors ───────────────────────────────────────────────
 export {
