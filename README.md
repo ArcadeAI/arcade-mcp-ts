@@ -316,7 +316,7 @@ Available hooks: `onMessage`, `onRequest`, `onCallTool`, `onListTools`, `onReadR
 Built-in middleware (enabled by default):
 
 - **ErrorHandlingMiddleware** — catches errors, returns structured MCP error responses
-- **LoggingMiddleware** — logs request/response timing
+- **LoggingMiddleware** — logs request/response timing (set `MCP_LOG_FORMAT=pretty` for colored terminal output instead of JSON)
 
 ## Multi-User HTTP Auth
 
@@ -456,6 +456,7 @@ All settings load from environment variables:
 | `MCP_SERVER_INSTRUCTIONS` | — | Server instructions |
 | `MCP_MIDDLEWARE_ENABLE_LOGGING` | `true` | Enable logging middleware |
 | `MCP_MIDDLEWARE_LOG_LEVEL` | `INFO` | Log level |
+| `MCP_LOG_FORMAT` | `json` | Log format: `json` (structured) or `pretty` (colored, human-readable) |
 | `MCP_MIDDLEWARE_MASK_ERROR_DETAILS` | `false` | Hide error details from clients |
 | `ARCADE_MCP_OTEL_ENABLE` | `false` | Enable OpenTelemetry telemetry |
 | `OTEL_SERVICE_NAME` | `arcade-mcp-worker` | OTEL service name |

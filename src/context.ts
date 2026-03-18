@@ -1,7 +1,7 @@
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
-import pino from "pino";
 import type { ToolAuthorization } from "./auth/types.js";
 import { AuthorizationError, NotFoundError } from "./exceptions.js";
+import { createLogger } from "./logger.js";
 import type { ResourceOwner } from "./types.js";
 
 /**
@@ -17,7 +17,7 @@ export type ServerExtra = Record<string, any> & {
 	sendRequest?: (...args: unknown[]) => Promise<unknown>;
 };
 
-const logger = pino({ name: "arcade-mcp", transport: undefined });
+const logger = createLogger("arcade-mcp");
 
 /**
  * Current context for the active request — enables get_current_context() pattern.

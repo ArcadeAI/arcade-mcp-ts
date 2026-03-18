@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Elysia } from "elysia";
-import pino from "pino";
+import { createLogger } from "../logger.js";
 import type { ArcadeMCPServer } from "../server.js";
 import type {
 	ResourceOwner,
@@ -9,7 +9,7 @@ import type {
 } from "../types.js";
 import { setupGracefulShutdown } from "./shutdown.js";
 
-const logger = pino({ name: "arcade-mcp-http" });
+const logger = createLogger("arcade-mcp-http");
 
 export interface HttpOptions {
 	host?: string;

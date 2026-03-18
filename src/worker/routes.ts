@@ -1,14 +1,14 @@
 import { SpanStatusCode } from "@opentelemetry/api";
 import { Elysia } from "elysia";
-import pino from "pino";
 import type { ToolCatalog } from "../catalog.js";
 import { toToolDefinition } from "../catalog.js";
 import { Context } from "../context.js";
 import { runTool } from "../executor.js";
+import { createLogger } from "../logger.js";
 import type { OTELHandler } from "../telemetry.js";
 import type { ToolCallRequest, ToolCallResponse } from "../types.js";
 
-const logger = pino({ name: "arcade-mcp-worker" });
+const logger = createLogger("arcade-mcp-worker");
 
 export interface WorkerRoutesOptions {
 	catalog: ToolCatalog;

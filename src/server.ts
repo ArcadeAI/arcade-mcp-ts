@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { SpanStatusCode } from "@opentelemetry/api";
-import pino from "pino";
 import { z } from "zod";
 import type { ToolCatalog } from "./catalog.js";
 import {
@@ -11,6 +10,7 @@ import {
 	type ToolContextData,
 } from "./context.js";
 import { runTool } from "./executor.js";
+import { createLogger } from "./logger.js";
 import type { PromptManager } from "./managers/prompt-manager.js";
 import type { ResourceManager } from "./managers/resource-manager.js";
 import { applyMiddleware } from "./middleware/base.js";
@@ -31,7 +31,7 @@ import type {
 	ResourceServerValidatorInterface,
 } from "./types.js";
 
-const _logger = pino({ name: "arcade-mcp-server" });
+const _logger = createLogger("arcade-mcp-server");
 
 export interface ArcadeMCPServerOptions {
 	name: string;

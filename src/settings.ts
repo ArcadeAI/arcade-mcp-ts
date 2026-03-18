@@ -3,6 +3,8 @@
  * Auto-captures non-prefixed env vars as tool secrets.
  */
 
+import type { LogFormat } from "./logger.js";
+
 export interface NotificationSettings {
 	rateLimitPerMinute: number;
 	defaultDebounceMs: number;
@@ -39,6 +41,7 @@ export interface AuthorizationServerConfig {
 export interface MiddlewareSettings {
 	enableLogging: boolean;
 	logLevel: string;
+	logFormat: LogFormat;
 	enableErrorHandling: boolean;
 	maskErrorDetails: boolean;
 }
@@ -153,6 +156,7 @@ export function loadSettings(): MCPSettings {
 		middleware: {
 			enableLogging: envBool("MCP_MIDDLEWARE_ENABLE_LOGGING", true),
 			logLevel: envStr("MCP_MIDDLEWARE_LOG_LEVEL", "INFO")!,
+			logFormat: (envStr("MCP_LOG_FORMAT", "json") as LogFormat)!,
 			enableErrorHandling: envBool(
 				"MCP_MIDDLEWARE_ENABLE_ERROR_HANDLING",
 				true,
