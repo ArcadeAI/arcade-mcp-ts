@@ -18,6 +18,8 @@ describe("loadSettings", () => {
 		expect(settings.middleware.enableErrorHandling).toBe(true);
 		expect(settings.transport.sessionTimeoutSeconds).toBe(300);
 		expect(settings.debug).toBe(false);
+		expect(settings.telemetry.enable).toBe(false);
+		expect(settings.telemetry.serviceName).toBe("arcade-mcp-worker");
 	});
 
 	it("reads env overrides", () => {
@@ -79,5 +81,14 @@ describe("loadSettings", () => {
 
 		const settings = loadSettings();
 		expect(settings.arcade.serverSecret).toBe("worker-secret");
+	});
+
+	it("reads telemetry settings from env", () => {
+		process.env.ARCADE_MCP_OTEL_ENABLE = "true";
+		process.env.OTEL_SERVICE_NAME = "my-service";
+
+		const settings = loadSettings();
+		expect(settings.telemetry.enable).toBe(true);
+		expect(settings.telemetry.serviceName).toBe("my-service");
 	});
 });
