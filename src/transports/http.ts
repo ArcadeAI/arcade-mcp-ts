@@ -18,14 +18,21 @@ export interface HttpOptions {
 }
 
 /**
- * Run the server using HTTP transport with Elysia.
- * Uses WebStandardStreamableHTTPServerTransport for MCP over HTTP.
- * Blocks until a shutdown signal is received.
+ * Handle returned by startHttp — allows stopping the server.
  */
-export async function runHttp(
+export interface HttpHandle {
+	/** Stop the HTTP server and close all sessions. */
+	stop(): Promise<void>;
+}
+
+/**
+ * Start the HTTP server without blocking.
+ * Returns a handle that can be used to stop the server.
+ */
+export async function startHttp(
 	server: ArcadeMCPServer,
 	options?: HttpOptions,
-): Promise<void> {
+): Promise<HttpHandle> {
 	const host = options?.host ?? "127.0.0.1";
 	const port = options?.port ?? 8000;
 
@@ -138,10 +145,8 @@ export async function runHttp(
 	app.listen({ hostname: host, port });
 	logger.info(`Arcade MCP HTTP server listening on ${host}:${port}`);
 
-	// Block until shutdown signal
-	await setupGracefulShutdown({
-		logger,
-		onShutdown: async () => {
+	return {
+		async stop() {
 			const closePromises = [...sessions.values()].map(async (entry) => {
 				await entry.transport.close().catch(() => {});
 				await entry.mcpServer.close().catch(() => {});
@@ -149,5 +154,23 @@ export async function runHttp(
 			await Promise.all(closePromises);
 			app.stop();
 		},
+	};
+}
+
+/**
+ * Run the server using HTTP transport with Elysia.
+ * Uses WebStandardStreamableHTTPServerTransport for MCP over HTTP.
+ * Blocks until a shutdown signal is received.
+ */
+export async function runHttp(
+	server: ArcadeMCPServer,
+	options?: HttpOptions,
+): Promise<void> {
+	const handle = await startHttp(server, options);
+
+	// Block until shutdown signal
+	await setupGracefulShutdown({
+		logger,
+		onShutdown: () => handle.stop(),
 	});
 }

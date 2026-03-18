@@ -83,8 +83,29 @@ CLI options:
 | `--port <n>` | `8000` | HTTP port |
 | `--name <name>` | directory name | App name |
 | `--dir <path>` | cwd | Directory to scan |
+| `--dev` | — | Auto-reload on file changes (HTTP only) |
 
 > **Node.js + TypeScript**: Use `npx tsx arcade-mcp` or Bun to import `.ts` tool files directly.
+
+### Dev Mode (Auto-Reload)
+
+Watch source files and automatically restart the server on changes:
+
+```bash
+npx @arcadeai/arcade-mcp --http --dev
+```
+
+Or programmatically:
+
+```typescript
+app.run({ transport: "http", dev: true });
+```
+
+When a `.ts`, `.js`, `.mts`, or `.mjs` file changes, the server stops, re-imports tool modules with fresh copies, and restarts. Files in `node_modules/`, `dist/`, and hidden directories are ignored.
+
+> **Note**: Dev mode only works with HTTP transport. Stdio sessions cannot be restarted.
+
+You can also enable dev mode via the `ARCADE_SERVER_RELOAD=1` environment variable.
 
 ## Features
 
@@ -98,6 +119,7 @@ CLI options:
 - **Error hierarchy** — structured errors with retry support, upstream error mapping
 - **Prompts** — `app.prompt(name, options, handler)` with argument validation and runtime management
 - **Resources** — `app.resource(uri, options, handler)` with MIME types and runtime management
+- **Dev mode** — auto-reload on file changes with `--dev` flag (HTTP only)
 - **Dual transport** — stdio and HTTP (Elysia + StreamableHTTP)
 - **Runtime compatible** — Bun and Node.js (no `Bun.*` APIs in library code)
 

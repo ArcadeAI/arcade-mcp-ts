@@ -50,6 +50,15 @@ describe("parseArgs", () => {
 		expect(parseArgs(["-v"]).version).toBe(true);
 	});
 
+	it("parses --dev flag", () => {
+		const args = parseArgs(["--dev"]);
+		expect(args.dev).toBe(true);
+	});
+
+	it("defaults dev to false", () => {
+		expect(parseArgs([]).dev).toBe(false);
+	});
+
 	it("parses multiple flags together", () => {
 		const args = parseArgs(["--http", "--port", "9000", "--name", "Test"]);
 		expect(args.transport).toBe("http");

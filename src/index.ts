@@ -10,6 +10,7 @@ export {
 	discoverToolModules,
 	isToolExport,
 	loadToolModules,
+	loadToolModulesWithCacheBusting,
 	parseArgs,
 } from "./cli.js";
 export { Context, getCurrentContext, setCurrentContext } from "./context.js";
@@ -91,7 +92,17 @@ export { ArcadeMCPServer } from "./server.js";
 export { loadSettings, type MCPSettings } from "./settings.js";
 // ── Telemetry ────────────────────────────────────────────
 export { OTELHandler, type OTELHandlerOptions } from "./telemetry.js";
-export { type HttpOptions, runHttp } from "./transports/http.js";
+export {
+	type DevReloadHandle,
+	type DevReloadOptions,
+	watchForChanges,
+} from "./transports/dev-reload.js";
+export {
+	type HttpHandle,
+	type HttpOptions,
+	runHttp,
+	startHttp,
+} from "./transports/http.js";
 
 // ── Transports ───────────────────────────────────────────
 export { setupGracefulShutdown } from "./transports/shutdown.js";

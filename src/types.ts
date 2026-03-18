@@ -170,6 +170,7 @@ export interface TransportOptions {
 	transport?: "stdio" | "http";
 	host?: string;
 	port?: number;
+	dev?: boolean;
 }
 
 /**
