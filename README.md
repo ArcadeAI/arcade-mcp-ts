@@ -281,6 +281,47 @@ auth.Notion()
 //     Twitch, X, Zoom
 ```
 
+## Arcade Cloud Auth (Local Development)
+
+Tools with `auth` requirements automatically resolve OAuth tokens through [Arcade Cloud](https://arcade.dev). There are two ways to set up credentials:
+
+### Option 1: Arcade CLI (recommended)
+
+Install the Arcade CLI and sign in. This stores credentials in `~/.arcade/credentials.yaml` which the framework reads automatically:
+
+```bash
+pip install arcade-ai
+arcade login
+```
+
+That's it — no environment variables needed. Run your server and tools will authenticate through your Arcade account:
+
+```bash
+bun run examples/github-tools/server.ts
+```
+
+### Option 2: Environment variables
+
+Set `ARCADE_API_KEY` and `ARCADE_USER_ID` directly:
+
+```bash
+export ARCADE_API_KEY="your-arcade-api-key"
+export ARCADE_USER_ID="your-user-id"
+```
+
+Environment variables take priority over the credentials file.
+
+### How it works
+
+When a tool with `auth` is called, the framework calls Arcade Cloud's authorization API:
+
+1. **First call** — returns an authorization URL. Visit the URL in your browser to complete the OAuth flow.
+2. **Retry the tool** — the token is now available and injected into `context.getAuthToken()`.
+
+This is automatic — no code changes needed. The same tools work both locally (via Arcade Cloud auth) and deployed (via worker routes where Arcade Cloud injects tokens directly).
+
+Set `ARCADE_AUTH_DISABLED=true` to skip auth resolution (useful for testing with mock tokens).
+
 ## Context
 
 Tool handlers receive `(args, context)`. The context provides namespaced facades:

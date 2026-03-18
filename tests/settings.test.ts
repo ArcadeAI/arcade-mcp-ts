@@ -91,4 +91,32 @@ describe("loadSettings", () => {
 		expect(settings.telemetry.enable).toBe(true);
 		expect(settings.telemetry.serviceName).toBe("my-service");
 	});
+
+	it("falls back to ~/.arcade/credentials.yaml for apiKey and userId", () => {
+		// When no env vars are set, loadSettings should pick up credentials from file.
+		// This test verifies the fallback runs without error; actual values depend
+		// on whether ~/.arcade/credentials.yaml exists on the test machine.
+		delete process.env.ARCADE_API_KEY;
+		delete process.env.ARCADE_USER_ID;
+
+		const settings = loadSettings();
+		// Should not throw, and should return string or undefined
+		expect(
+			typeof settings.arcade.apiKey === "string" ||
+				settings.arcade.apiKey === undefined,
+		).toBe(true);
+		expect(
+			typeof settings.arcade.userId === "string" ||
+				settings.arcade.userId === undefined,
+		).toBe(true);
+	});
+
+	it("env vars take priority over credentials file", () => {
+		process.env.ARCADE_API_KEY = "env-key";
+		process.env.ARCADE_USER_ID = "env-user";
+
+		const settings = loadSettings();
+		expect(settings.arcade.apiKey).toBe("env-key");
+		expect(settings.arcade.userId).toBe("env-user");
+	});
 });

@@ -1,7 +1,9 @@
+import Arcade from "@arcadeai/arcadejs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { SpanStatusCode } from "@opentelemetry/api";
 import { z } from "zod";
+import type { ToolAuthorization } from "./auth/types.js";
 import type { ToolCatalog } from "./catalog.js";
 import {
 	Context,
@@ -61,6 +63,7 @@ export class ArcadeMCPServer {
 	private resourceManager?: ResourceManager;
 	private name: string;
 	private version: string;
+	private arcadeClient?: Arcade;
 
 	constructor(catalog: ToolCatalog, options: ArcadeMCPServerOptions) {
 		this.catalog = catalog;
@@ -158,6 +161,19 @@ export class ArcadeMCPServer {
 		const executeInner = async (): Promise<CallToolResult> => {
 			// Build tool context with secrets
 			const toolCtxData = this.buildToolContext(tool);
+
+			// Resolve auth token from Arcade Cloud for tools with auth requirements.
+			// Skipped when a token is already present (e.g. injected by worker routes).
+			if (tool.auth && !toolCtxData.authToken) {
+				const authResult = await this.resolveAuthToken(
+					tool.auth,
+					toolCtxData.userId,
+				);
+				if (authResult.error) return authResult.error;
+				if (authResult.token) {
+					toolCtxData.authToken = authResult.token;
+				}
+			}
 
 			// Build Context
 			const context = new Context(extra, {
@@ -286,6 +302,93 @@ export class ArcadeMCPServer {
 		}
 
 		return undefined;
+	}
+
+	/**
+	 * Get or create the Arcade Cloud client. Returns undefined if no API key is configured.
+	 */
+	private getArcadeClient(): Arcade | undefined {
+		if (this.arcadeClient) return this.arcadeClient;
+		const apiKey = this.settings?.arcade.apiKey;
+		if (!apiKey) return undefined;
+		this.arcadeClient = new Arcade({
+			apiKey,
+			baseURL: this.settings?.arcade.apiUrl,
+		});
+		return this.arcadeClient;
+	}
+
+	/**
+	 * Resolve an auth token from Arcade Cloud for a tool with an auth requirement.
+	 * Returns the token on success, or a CallToolResult error to return to the client.
+	 */
+	private async resolveAuthToken(
+		toolAuth: ToolAuthorization,
+		userId: string | undefined,
+	): Promise<{ token?: string; error?: CallToolResult }> {
+		if (this.settings?.arcade.authDisabled) {
+			return {};
+		}
+
+		const client = this.getArcadeClient();
+		if (!client) {
+			_logger.warn(
+				"Tool requires auth but no ARCADE_API_KEY is configured. Set ARCADE_API_KEY to enable Arcade Cloud auth.",
+			);
+			return {};
+		}
+
+		if (!userId) {
+			return {
+				error: {
+					content: [
+						{
+							type: "text" as const,
+							text: "This tool requires authentication but no user ID is available. Set the ARCADE_USER_ID environment variable.",
+						},
+					],
+					isError: true,
+				},
+			};
+		}
+
+		const response = await client.auth.authorize({
+			user_id: userId,
+			auth_requirement: {
+				provider_id: toolAuth.providerId,
+				provider_type: toolAuth.providerType,
+				oauth2: toolAuth.scopes ? { scopes: toolAuth.scopes } : undefined,
+			},
+		});
+
+		if (response.status === "completed") {
+			return { token: response.context?.token ?? undefined };
+		}
+
+		if (response.status === "pending" || response.status === "not_started") {
+			const message = response.url
+				? `Authorization required. Please visit the following URL to authorize, then retry:\n\n${response.url}`
+				: "Authorization is pending. Please complete the authorization flow, then retry.";
+			return {
+				error: {
+					content: [{ type: "text" as const, text: message }],
+					isError: true,
+				},
+			};
+		}
+
+		// status === "failed" or unknown
+		return {
+			error: {
+				content: [
+					{
+						type: "text" as const,
+						text: `Authorization failed for provider "${toolAuth.providerId}". Please try again.`,
+					},
+				],
+				isError: true,
+			},
+		};
 	}
 
 	// ── Runtime tool management ──────────────────────────────

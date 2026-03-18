@@ -3,6 +3,9 @@
  * Auto-captures non-prefixed env vars as tool secrets.
  */
 
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { LogFormat } from "./logger.js";
 
 export interface NotificationSettings {
@@ -118,6 +121,41 @@ function parseAuthorizationServers(): AuthorizationServerConfig[] | undefined {
 }
 
 /**
+ * Parsed contents of ~/.arcade/credentials.yaml.
+ */
+interface ArcadeCredentials {
+	apiKey?: string;
+	userId?: string;
+}
+
+/**
+ * Load credentials from ~/.arcade/credentials.yaml (or $ARCADE_WORK_DIR/.arcade/credentials.yaml).
+ * Returns the access token as apiKey and user email as userId.
+ * Silently returns empty object on any error.
+ */
+function loadArcadeCredentials(): ArcadeCredentials {
+	try {
+		const configDir = process.env.ARCADE_WORK_DIR
+			? join(process.env.ARCADE_WORK_DIR, ".arcade")
+			: join(homedir(), ".arcade");
+		const filePath = join(configDir, "credentials.yaml");
+		const content = readFileSync(filePath, "utf-8");
+
+		// Minimal YAML parsing — the credentials file has a simple, known structure.
+		// We avoid adding a YAML dependency by extracting values with regex.
+		const accessTokenMatch = content.match(/access_token:\s*['"]?([^\s'"]+)/);
+		const emailMatch = content.match(/email:\s*['"]?([^\s'"]+)/);
+
+		return {
+			apiKey: accessTokenMatch?.[1],
+			userId: emailMatch?.[1],
+		};
+	} catch {
+		return {};
+	}
+}
+
+/**
  * Load settings from environment variables.
  */
 export function loadSettings(): MCPSettings {
@@ -167,15 +205,18 @@ export function loadSettings(): MCPSettings {
 			enable: envBool("ARCADE_MCP_OTEL_ENABLE", false),
 			serviceName: envStr("OTEL_SERVICE_NAME", "arcade-mcp-worker")!,
 		},
-		arcade: {
-			apiKey: envStr("ARCADE_API_KEY"),
-			apiUrl: envStr("ARCADE_API_URL", "https://api.arcade.dev")!,
-			authDisabled: envBool("ARCADE_AUTH_DISABLED", false),
-			serverSecret:
-				envStr("ARCADE_WORKER_SECRET") ?? envStr("ARCADE_SERVER_SECRET"),
-			environment: envStr("ARCADE_ENVIRONMENT", "dev")!,
-			userId: envStr("ARCADE_USER_ID"),
-		},
+		arcade: (() => {
+			const creds = loadArcadeCredentials();
+			return {
+				apiKey: envStr("ARCADE_API_KEY") ?? creds.apiKey,
+				apiUrl: envStr("ARCADE_API_URL", "https://api.arcade.dev")!,
+				authDisabled: envBool("ARCADE_AUTH_DISABLED", false),
+				serverSecret:
+					envStr("ARCADE_WORKER_SECRET") ?? envStr("ARCADE_SERVER_SECRET"),
+				environment: envStr("ARCADE_ENVIRONMENT", "dev")!,
+				userId: envStr("ARCADE_USER_ID") ?? creds.userId,
+			};
+		})(),
 		toolSecrets: collectToolSecrets(),
 	};
 }
