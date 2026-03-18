@@ -29,7 +29,9 @@ app.tool(
 		const response = await fetch(url);
 
 		if (response.status === 401) {
-			throw new FatalToolError("Invalid API key — check OPENWEATHERMAP_API_KEY");
+			throw new FatalToolError(
+				"Invalid API key — check OPENWEATHERMAP_API_KEY",
+			);
 		}
 		if (response.status === 429) {
 			throw new RetryableToolError("Rate limited by OpenWeatherMap API", {
@@ -79,13 +81,14 @@ app.tool(
 		const response = await fetch(url);
 
 		if (response.status === 401) {
-			throw new FatalToolError("Invalid API key — check OPENWEATHERMAP_API_KEY");
+			throw new FatalToolError(
+				"Invalid API key — check OPENWEATHERMAP_API_KEY",
+			);
 		}
 		if (response.status === 429 || response.status === 503) {
-			throw new RetryableToolError(
-				"Weather service temporarily unavailable",
-				{ retryAfterMs: 30_000 },
-			);
+			throw new RetryableToolError("Weather service temporarily unavailable", {
+				retryAfterMs: 30_000,
+			});
 		}
 		if (!response.ok) {
 			throw new UpstreamError(
@@ -101,9 +104,8 @@ app.tool(
 			.map((entry: Record<string, unknown>) => ({
 				date: (entry as { dt_txt: string }).dt_txt,
 				temperature: (entry as { main: { temp: number } }).main.temp,
-				description: (
-					entry as { weather: Array<{ description: string }> }
-				).weather[0].description,
+				description: (entry as { weather: Array<{ description: string }> })
+					.weather[0].description,
 			}));
 
 		return { city: data.city.name, forecasts: dailyForecasts };

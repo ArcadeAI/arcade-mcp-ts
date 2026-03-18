@@ -1,12 +1,12 @@
 import { z } from "zod";
 import {
+	type CallNext,
 	ErrorHandlingMiddleware,
 	LoggingMiddleware,
 	MCPApp,
 	Middleware,
-	RetryableToolError,
-	type CallNext,
 	type MiddlewareContext,
+	RetryableToolError,
 } from "../../src/index.js";
 
 // ── Custom Middleware: Timing ───────────────────────────────
@@ -19,7 +19,9 @@ class TimingMiddleware extends Middleware {
 		const start = performance.now();
 		const result = await next(context);
 		const elapsed = (performance.now() - start).toFixed(2);
-		console.log(`[timing] ${context.params?.name ?? "unknown"} took ${elapsed}ms`);
+		console.log(
+			`[timing] ${context.params?.name ?? "unknown"} took ${elapsed}ms`,
+		);
 		return result;
 	}
 }
@@ -59,7 +61,8 @@ class RateLimitMiddleware extends Middleware {
 const app = new MCPApp({
 	name: "MathServer",
 	version: "1.0.0",
-	instructions: "Math tools with custom middleware for timing and rate limiting",
+	instructions:
+		"Math tools with custom middleware for timing and rate limiting",
 	middleware: [
 		new ErrorHandlingMiddleware(),
 		new LoggingMiddleware(),

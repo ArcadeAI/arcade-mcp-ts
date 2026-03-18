@@ -41,7 +41,11 @@ app.tool(
 
 		const data = await response.json();
 		return data.items.map(
-			(event: { summary: string; start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string } }) => ({
+			(event: {
+				summary: string;
+				start: { dateTime?: string; date?: string };
+				end: { dateTime?: string; date?: string };
+			}) => ({
 				summary: event.summary,
 				start: event.start.dateTime ?? event.start.date,
 				end: event.end.dateTime ?? event.end.date,
@@ -89,7 +93,10 @@ app.tool(
 		description: "Create a new issue in Linear",
 		parameters: z.object({
 			title: z.string().describe("Issue title"),
-			description: z.string().optional().describe("Issue description (markdown)"),
+			description: z
+				.string()
+				.optional()
+				.describe("Issue description (markdown)"),
 			team_id: z.string().describe("Linear team ID"),
 		}),
 		auth: auth.Linear(),
