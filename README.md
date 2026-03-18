@@ -331,6 +331,14 @@ telemetry.initialize();
 await telemetry.shutdown();
 ```
 
+## Examples
+
+The `examples/` directory contains runnable servers demonstrating different features. Run any example with:
+
+```bash
+bun run examples/echo/server.ts
+```
+
 ## Configuration
 
 All settings load from environment variables:
