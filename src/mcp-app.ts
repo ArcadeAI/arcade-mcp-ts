@@ -5,6 +5,7 @@ import { PromptManager } from "./managers/prompt-manager.js";
 import { ResourceManager } from "./managers/resource-manager.js";
 import { ArcadeMCPServer } from "./server.js";
 import { loadSettings, type MCPSettings } from "./settings.js";
+import { OTELHandler } from "./telemetry.js";
 import type {
 	MaterializedTool,
 	MCPAppOptions,
@@ -45,6 +46,7 @@ export class MCPApp {
 	private _middleware: Middleware[];
 	private _auth?: ResourceServerValidatorInterface;
 	private _server?: ArcadeMCPServer;
+	private _telemetry?: OTELHandler;
 	private _toolkitName: string;
 
 	constructor(options: MCPAppOptions) {
@@ -151,6 +153,23 @@ export class MCPApp {
 				? Number.parseInt(process.env.ARCADE_SERVER_PORT, 10)
 				: 8000);
 
+		// Initialize telemetry if enabled
+		if (this._settings.telemetry.enable) {
+			this._telemetry = new OTELHandler({
+				enable: true,
+				serviceName: this._settings.telemetry.serviceName,
+				environment: this._settings.arcade.environment,
+			});
+			this._telemetry.initialize();
+
+			const shutdownTelemetry = async () => {
+				await this._telemetry?.shutdown();
+			};
+			process.on("SIGINT", shutdownTelemetry);
+			process.on("SIGTERM", shutdownTelemetry);
+			process.on("beforeExit", shutdownTelemetry);
+		}
+
 		// Create server
 		this._server = new ArcadeMCPServer(this._catalog, {
 			name: this.name,
@@ -160,6 +179,7 @@ export class MCPApp {
 			settings: this._settings,
 			middleware: this._middleware as never[],
 			auth: this._auth,
+			telemetry: this._telemetry,
 			promptManager: this._promptManager,
 			resourceManager: this._resourceManager,
 		});
