@@ -27,7 +27,7 @@ TypeScript port of the Python `arcade-mcp` framework, published as `@arcadeai/ar
 - **`src/middleware/`** — Composable middleware with method-specific hooks
 - **`src/resource-server/`** — JWT Bearer token validation for multi-user HTTP auth
 - **`src/worker/`** — Elysia routes for `/worker/v1/*` (Arcade Cloud integration)
-- **`src/transports/`** — Stdio and HTTP (Elysia + StreamableHTTP) runners
+- **`src/transports/`** — Stdio and HTTP (Elysia + StreamableHTTP) runners, dev-mode file watcher + auto-reload
 
 ## Conventions
 

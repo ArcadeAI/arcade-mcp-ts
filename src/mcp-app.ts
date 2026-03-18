@@ -1,3 +1,4 @@
+import pino from "pino";
 import type { z } from "zod";
 import { ToolCatalog } from "./catalog.js";
 import { ServerError } from "./exceptions.js";
@@ -6,6 +7,7 @@ import { ResourceManager } from "./managers/resource-manager.js";
 import { ArcadeMCPServer } from "./server.js";
 import { loadSettings, type MCPSettings } from "./settings.js";
 import { OTELHandler } from "./telemetry.js";
+import type { HttpHandle } from "./transports/http.js";
 import type {
 	MaterializedTool,
 	MCPAppOptions,
@@ -20,6 +22,8 @@ import type {
 	ToolOptions,
 	TransportOptions,
 } from "./types.js";
+
+const logger = pino({ name: "arcade-mcp-app" });
 
 const NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+)*$/;
 
@@ -49,6 +53,7 @@ export class MCPApp {
 	private _server?: ArcadeMCPServer;
 	private _telemetry?: OTELHandler;
 	private _toolkitInfo: ToolkitInfo;
+	private _onReload?: (changedFiles: string[]) => Promise<void>;
 
 	constructor(options: MCPAppOptions) {
 		if (!NAME_REGEX.test(options.name)) {
@@ -157,6 +162,7 @@ export class MCPApp {
 			(process.env.ARCADE_SERVER_PORT
 				? Number.parseInt(process.env.ARCADE_SERVER_PORT, 10)
 				: 8000);
+		const dev = options?.dev ?? process.env.ARCADE_SERVER_RELOAD === "1";
 
 		// Initialize telemetry if enabled
 		if (this._settings.telemetry.enable) {
@@ -175,8 +181,43 @@ export class MCPApp {
 			process.on("beforeExit", shutdownTelemetry);
 		}
 
-		// Create server
-		this._server = new ArcadeMCPServer(this._catalog, {
+		if (dev && transport === "stdio") {
+			logger.warn(
+				"Dev mode (auto-reload) is not supported with stdio transport. Starting without reload.",
+			);
+		}
+
+		if (dev && transport === "http") {
+			await this._runHttpWithReload({ host, port });
+		} else {
+			await this._runOnce(transport, host, port);
+		}
+	}
+
+	/**
+	 * Create the server, register components, and run the transport.
+	 */
+	private async _runOnce(
+		transport: "stdio" | "http",
+		host: string,
+		port: number,
+	): Promise<void> {
+		this._server = this._createServer();
+
+		if (transport === "stdio") {
+			const { runStdio } = await import("./transports/stdio.js");
+			await runStdio(this._server);
+		} else {
+			const { runHttp } = await import("./transports/http.js");
+			await runHttp(this._server, { host, port, auth: this._auth });
+		}
+	}
+
+	/**
+	 * Create a new ArcadeMCPServer and register all components.
+	 */
+	private _createServer(): ArcadeMCPServer {
+		const server = new ArcadeMCPServer(this._catalog, {
 			name: this.name,
 			version: this.version,
 			title: this.title,
@@ -189,18 +230,72 @@ export class MCPApp {
 			resourceManager: this._resourceManager,
 		});
 
-		// Register all components from catalogs/managers
-		this._server.registerCatalogTools();
-		this._server.registerCatalogPrompts();
-		this._server.registerCatalogResources();
+		server.registerCatalogTools();
+		server.registerCatalogPrompts();
+		server.registerCatalogResources();
 
-		if (transport === "stdio") {
-			const { runStdio } = await import("./transports/stdio.js");
-			await runStdio(this._server);
-		} else {
-			const { runHttp } = await import("./transports/http.js");
-			await runHttp(this._server, { host, port, auth: this._auth });
-		}
+		return server;
+	}
+
+	/**
+	 * Run in dev mode: start HTTP server, watch files, restart on changes.
+	 */
+	private async _runHttpWithReload(options: {
+		host: string;
+		port: number;
+	}): Promise<void> {
+		const { startHttp } = await import("./transports/http.js");
+		const { watchForChanges } = await import("./transports/dev-reload.js");
+		const { setupGracefulShutdown } = await import("./transports/shutdown.js");
+
+		this._server = this._createServer();
+		let handle: HttpHandle = await startHttp(this._server, {
+			...options,
+			auth: this._auth,
+		});
+
+		logger.info("Dev mode enabled — watching for file changes...");
+
+		const watcher = watchForChanges({
+			dir: process.cwd(),
+			logger,
+			onChange: async (changedFiles) => {
+				// Stop the current HTTP server
+				await handle.stop();
+
+				// Re-import tool modules if there's a reload callback
+				if (this._onReload) {
+					await this._onReload(changedFiles);
+				}
+
+				// Create a fresh server and start it
+				this._server = this._createServer();
+				handle = await startHttp(this._server, {
+					...options,
+					auth: this._auth,
+				});
+
+				logger.info("Server reloaded successfully.");
+			},
+		});
+
+		// Block until shutdown
+		await setupGracefulShutdown({
+			logger,
+			onShutdown: async () => {
+				watcher.close();
+				await handle.stop();
+			},
+		});
+	}
+
+	/**
+	 * Set a callback invoked during dev-mode reload, before the server restarts.
+	 * Typically used by the CLI to re-discover and re-import tool modules.
+	 */
+	onReload(callback: (changedFiles: string[]) => Promise<void>): this {
+		this._onReload = callback;
+		return this;
 	}
 
 	/**

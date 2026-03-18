@@ -12,6 +12,7 @@ export interface CLIArgs {
 	port: number;
 	name: string;
 	dir: string;
+	dev: boolean;
 	help: boolean;
 	version: boolean;
 }
@@ -24,6 +25,7 @@ export function parseArgs(argv: string[]): CLIArgs {
 		port: 8000,
 		name: basename(process.cwd()),
 		dir: process.cwd(),
+		dev: false,
 		help: false,
 		version: false,
 	};
@@ -45,6 +47,9 @@ export function parseArgs(argv: string[]): CLIArgs {
 				break;
 			case "--dir":
 				args.dir = resolve(argv[++i] ?? ".");
+				break;
+			case "--dev":
+				args.dev = true;
 				break;
 			case "--help":
 			case "-h":
@@ -212,6 +217,68 @@ export async function loadToolModules(files: string[]): Promise<
 	return results;
 }
 
+/**
+ * Like loadToolModules but appends a cache-busting query param to each import URL
+ * so that the runtime re-evaluates the module instead of returning a cached copy.
+ */
+export async function loadToolModulesWithCacheBusting(files: string[]): Promise<
+	{
+		file: string;
+		tools: Record<string, { options: unknown; handler: unknown }>;
+	}[]
+> {
+	const results: {
+		file: string;
+		tools: Record<string, { options: unknown; handler: unknown }>;
+	}[] = [];
+
+	const cacheBust = `?t=${Date.now()}`;
+
+	for (const file of files) {
+		let mod: Record<string, unknown>;
+		try {
+			mod = await import(`${pathToFileURL(file).href}${cacheBust}`);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			console.error(`Warning: Failed to import "${file}": ${message}`);
+			continue;
+		}
+
+		const tools: Record<string, { options: unknown; handler: unknown }> = {};
+
+		for (const [exportName, exportValue] of Object.entries(mod)) {
+			if (exportName === "__esModule") continue;
+
+			if (isToolExport(exportValue)) {
+				tools[exportName] = exportValue as {
+					options: unknown;
+					handler: unknown;
+				};
+				continue;
+			}
+
+			if (typeof exportValue === "object" && exportValue !== null) {
+				for (const [toolName, toolDef] of Object.entries(
+					exportValue as Record<string, unknown>,
+				)) {
+					if (isToolExport(toolDef)) {
+						tools[toolName] = toolDef as {
+							options: unknown;
+							handler: unknown;
+						};
+					}
+				}
+			}
+		}
+
+		if (Object.keys(tools).length > 0) {
+			results.push({ file, tools });
+		}
+	}
+
+	return results;
+}
+
 function printUsage(): void {
 	console.log(`Usage: arcade-mcp [options]
 
@@ -223,6 +290,7 @@ Options:
   --port <n>      HTTP port (default: 8000)
   --name <name>   App name (default: current directory name)
   --dir <path>    Directory to scan for tools (default: cwd)
+  --dev           Enable auto-reload on file changes (HTTP only)
   -h, --help      Show this help message
   -v, --version   Show version
 
@@ -242,7 +310,8 @@ Tool Discovery:
 Environment Variables:
   ARCADE_SERVER_TRANSPORT   Override transport (stdio|http)
   ARCADE_SERVER_HOST        Override HTTP host
-  ARCADE_SERVER_PORT        Override HTTP port`);
+  ARCADE_SERVER_PORT        Override HTTP port
+  ARCADE_SERVER_RELOAD      Enable auto-reload (0 or 1)`);
 }
 
 async function main(): Promise<void> {
@@ -317,6 +386,24 @@ async function main(): Promise<void> {
 		totalTools += Object.keys(tools).length;
 	}
 
+	// Set up dev-mode reload: re-discover and re-import tool modules
+	if (args.dev) {
+		app.onReload(async () => {
+			app.catalog.clear();
+
+			const freshFiles = await discoverToolModules(args.dir);
+			const freshLoaded = await loadToolModulesWithCacheBusting(freshFiles);
+
+			let count = 0;
+			for (const { tools } of freshLoaded) {
+				app.addToolsFrom(tools as Parameters<MCPApp["addToolsFrom"]>[0]);
+				count += Object.keys(tools).length;
+			}
+
+			console.error(`Reloaded ${count} tool(s).`);
+		});
+	}
+
 	console.error(
 		`Registered ${totalTools} tool(s). Starting ${args.transport} server...`,
 	);
@@ -325,6 +412,7 @@ async function main(): Promise<void> {
 		transport: args.transport,
 		host: args.host,
 		port: args.port,
+		dev: args.dev,
 	});
 }
 

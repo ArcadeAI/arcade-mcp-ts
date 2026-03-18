@@ -185,6 +185,13 @@ export class ToolCatalog {
 	}
 
 	/**
+	 * Remove all tools from the catalog.
+	 */
+	clear(): void {
+		this.tools.clear();
+	}
+
+	/**
 	 * Remove a tool from the catalog.
 	 */
 	removeTool(name: string): boolean {
