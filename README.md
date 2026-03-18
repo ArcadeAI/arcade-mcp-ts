@@ -116,6 +116,24 @@ app.tool(
 
 Any env var not prefixed with `MCP_` or `_` is available as a tool secret.
 
+### Toolkit Versioning
+
+The app's `name`, `version`, and `title` are automatically attached to every tool as toolkit metadata. You can also override toolkit info per-tool:
+
+```typescript
+app.tool(
+  "myTool",
+  {
+    description: "A tool with custom toolkit info",
+    parameters: z.object({}),
+    toolkit: { name: "my-toolkit", version: "1.2.0" },
+  },
+  async () => {},
+);
+```
+
+Versions are normalized to semver — `"1"` becomes `"1.0.0"`, `"v1.2"` becomes `"1.2.0"`.
+
 ## Auth Providers
 
 Factory functions for 21 OAuth2 providers:

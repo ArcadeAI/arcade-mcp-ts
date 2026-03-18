@@ -16,6 +16,7 @@ import type {
 	ResourceOptions,
 	ResourceServerValidatorInterface,
 	ToolHandler,
+	ToolkitInfo,
 	ToolOptions,
 	TransportOptions,
 } from "./types.js";
@@ -47,7 +48,7 @@ export class MCPApp {
 	private _auth?: ResourceServerValidatorInterface;
 	private _server?: ArcadeMCPServer;
 	private _telemetry?: OTELHandler;
-	private _toolkitName: string;
+	private _toolkitInfo: ToolkitInfo;
 
 	constructor(options: MCPAppOptions) {
 		if (!NAME_REGEX.test(options.name)) {
@@ -67,7 +68,11 @@ export class MCPApp {
 		this._settings = loadSettings();
 		this._middleware = options.middleware ?? [];
 		this._auth = options.auth;
-		this._toolkitName = options.name;
+		this._toolkitInfo = {
+			name: options.name,
+			version: options.version,
+			description: options.title ?? options.name,
+		};
 	}
 
 	/**
@@ -78,7 +83,7 @@ export class MCPApp {
 		options: ToolOptions<T>,
 		handler: ToolHandler<z.infer<T>>,
 	): this {
-		this._catalog.addTool(name, options, handler, this._toolkitName);
+		this._catalog.addTool(name, options, handler, this._toolkitInfo);
 		return this;
 	}
 
@@ -90,7 +95,7 @@ export class MCPApp {
 		module: Record<string, { options: ToolOptions; handler: ToolHandler }>,
 	): this {
 		for (const [name, def] of Object.entries(module)) {
-			this._catalog.addTool(name, def.options, def.handler, this._toolkitName);
+			this._catalog.addTool(name, def.options, def.handler, this._toolkitInfo);
 		}
 		return this;
 	}

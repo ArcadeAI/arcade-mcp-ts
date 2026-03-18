@@ -3,7 +3,7 @@
 // ── Auth ─────────────────────────────────────────────────
 export * as auth from "./auth/index.js";
 export type { AuthProviderType, ToolAuthorization } from "./auth/types.js";
-export { ToolCatalog, toToolDefinition } from "./catalog.js";
+export { normalizeVersion, ToolCatalog, toToolDefinition } from "./catalog.js";
 export { Context, getCurrentContext, setCurrentContext } from "./context.js";
 // ── Errors ───────────────────────────────────────────────
 export {
@@ -104,6 +104,7 @@ export type {
 	ToolContext,
 	ToolDefinition,
 	ToolHandler,
+	ToolkitInfo,
 	ToolOptions,
 	TransportOptions,
 } from "./types.js";
