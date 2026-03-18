@@ -1,6 +1,7 @@
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 import pino from "pino";
 import type { ToolAuthorization } from "./auth/types.js";
+import { AuthorizationError, NotFoundError } from "./exceptions.js";
 import type { ResourceOwner } from "./types.js";
 
 /**
@@ -119,7 +120,7 @@ export class Context {
 	getSecret(name: string): string {
 		const value = this._toolContext.secrets[name];
 		if (value === undefined) {
-			throw new Error(`Secret '${name}' not found in context`);
+			throw new NotFoundError(`Secret '${name}' not found in context`);
 		}
 		return value;
 	}
@@ -130,7 +131,7 @@ export class Context {
 	getAuthToken(): string {
 		const token = this._toolContext.authToken;
 		if (!token) {
-			throw new Error("Auth token not found in context");
+			throw new AuthorizationError("Auth token not found in context");
 		}
 		return token;
 	}

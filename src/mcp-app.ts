@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { ToolCatalog } from "./catalog.js";
-import { ServerError } from "./errors.js";
+import { ServerError } from "./exceptions.js";
 import { ArcadeMCPServer } from "./server.js";
 import { loadSettings, type MCPSettings } from "./settings.js";
 import type {

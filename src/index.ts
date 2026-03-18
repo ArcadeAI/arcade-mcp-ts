@@ -11,7 +11,6 @@ export {
 	ErrorKind,
 	FatalToolError,
 	RetryableToolError,
-	ServerError,
 	ToolDefinitionError,
 	ToolError,
 	ToolExecutionError,
@@ -26,6 +25,24 @@ export {
 	UpstreamError,
 	UpstreamRateLimitError,
 } from "./errors.js";
+// ── MCP Exceptions ──────────────────────────────────────
+export {
+	AuthorizationError,
+	LifespanError,
+	MCPContextError,
+	MCPError,
+	MCPRuntimeError,
+	NotFoundError,
+	PromptError,
+	ProtocolError,
+	RequestError,
+	ResourceError,
+	ResponseError,
+	ServerError,
+	ServerRequestError,
+	SessionError,
+	TransportError,
+} from "./exceptions.js";
 export {
 	handleToolError,
 	runTool,

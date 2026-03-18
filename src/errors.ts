@@ -255,13 +255,3 @@ export class UpstreamRateLimitError extends UpstreamError {
 		super(message, { ...options, statusCode: 429 });
 	}
 }
-
-/**
- * Server-level errors (not tool-related).
- */
-export class ServerError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "ServerError";
-	}
-}
