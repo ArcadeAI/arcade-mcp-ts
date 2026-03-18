@@ -270,6 +270,49 @@ throw new ContextRequiredToolError("Missing info", {
 });
 ```
 
+## Telemetry (OpenTelemetry)
+
+Built-in OpenTelemetry support for traces and metrics, exported via OTLP HTTP.
+
+Enable with an environment variable:
+
+```bash
+ARCADE_MCP_OTEL_ENABLE=true \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+bun run server.ts
+```
+
+When enabled, the framework automatically:
+
+- Creates `RunTool` spans around every MCP tool execution (with `tool_name`, `toolkit_name`, `environment` attributes)
+- Creates `CallTool` and `Catalog` spans in worker routes
+- Increments a `tool_call` counter metric per tool invocation
+- Exports traces and metrics via OTLP HTTP to the configured endpoint
+
+OTLP endpoint, headers, and protocol are configured via standard `OTEL_EXPORTER_OTLP_*` env vars.
+
+| Variable | Default | Description |
+|---|---|---|
+| `ARCADE_MCP_OTEL_ENABLE` | `false` | Enable OpenTelemetry |
+| `OTEL_SERVICE_NAME` | `arcade-mcp-worker` | Service name in traces |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTLP collector endpoint |
+| `ARCADE_ENVIRONMENT` | `dev` | Deployment environment name |
+
+You can also use the `OTELHandler` directly for custom integration:
+
+```typescript
+import { OTELHandler } from "@arcadeai/arcade-mcp";
+
+const telemetry = new OTELHandler({
+  enable: true,
+  serviceName: "my-service",
+  environment: "production",
+});
+telemetry.initialize();
+// ... use telemetry.getTracer(), telemetry.getMeter()
+await telemetry.shutdown();
+```
+
 ## Configuration
 
 All settings load from environment variables:
@@ -282,6 +325,8 @@ All settings load from environment variables:
 | `MCP_MIDDLEWARE_ENABLE_LOGGING` | `true` | Enable logging middleware |
 | `MCP_MIDDLEWARE_LOG_LEVEL` | `INFO` | Log level |
 | `MCP_MIDDLEWARE_MASK_ERROR_DETAILS` | `false` | Hide error details from clients |
+| `ARCADE_MCP_OTEL_ENABLE` | `false` | Enable OpenTelemetry telemetry |
+| `OTEL_SERVICE_NAME` | `arcade-mcp-worker` | OTEL service name |
 | `ARCADE_WORKER_SECRET` | — | Bearer token for worker routes |
 | `ARCADE_API_KEY` | — | Arcade API key |
 | `ARCADE_API_URL` | `https://api.arcade.dev` | Arcade API URL |

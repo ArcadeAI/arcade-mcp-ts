@@ -43,6 +43,11 @@ export interface MiddlewareSettings {
 	maskErrorDetails: boolean;
 }
 
+export interface TelemetrySettings {
+	enable: boolean;
+	serviceName: string;
+}
+
 export interface ArcadeSettings {
 	apiKey?: string;
 	apiUrl: string;
@@ -59,6 +64,7 @@ export interface MCPSettings {
 	server: ServerSettings;
 	resourceServer: ResourceServerSettings;
 	middleware: MiddlewareSettings;
+	telemetry: TelemetrySettings;
 	arcade: ArcadeSettings;
 	toolSecrets: Record<string, string>;
 }
@@ -152,6 +158,10 @@ export function loadSettings(): MCPSettings {
 				true,
 			),
 			maskErrorDetails: envBool("MCP_MIDDLEWARE_MASK_ERROR_DETAILS", false),
+		},
+		telemetry: {
+			enable: envBool("ARCADE_MCP_OTEL_ENABLE", false),
+			serviceName: envStr("OTEL_SERVICE_NAME", "arcade-mcp-worker")!,
 		},
 		arcade: {
 			apiKey: envStr("ARCADE_API_KEY"),

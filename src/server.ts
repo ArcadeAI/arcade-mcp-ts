@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { SpanStatusCode } from "@opentelemetry/api";
 import pino from "pino";
 import type { ToolCatalog } from "./catalog.js";
 import {
@@ -13,6 +14,7 @@ import { applyMiddleware } from "./middleware/base.js";
 import { ErrorHandlingMiddleware } from "./middleware/error-handling.js";
 import { LoggingMiddleware } from "./middleware/logging.js";
 import type { MCPSettings } from "./settings.js";
+import type { OTELHandler } from "./telemetry.js";
 import type {
 	CallNext,
 	MaterializedTool,
@@ -32,6 +34,7 @@ export interface ArcadeMCPServerOptions {
 	settings?: MCPSettings;
 	middleware?: MiddlewareInterface[];
 	auth?: ResourceServerValidatorInterface;
+	telemetry?: OTELHandler;
 }
 
 /**
@@ -44,6 +47,7 @@ export class ArcadeMCPServer {
 	private settings?: MCPSettings;
 	private middlewareChain: MiddlewareInterface[];
 	private auth?: ResourceServerValidatorInterface;
+	private telemetry?: OTELHandler;
 	private name: string;
 	private version: string;
 
@@ -53,6 +57,7 @@ export class ArcadeMCPServer {
 		this.version = options.version;
 		this.settings = options.settings;
 		this.auth = options.auth;
+		this.telemetry = options.telemetry;
 
 		// Build middleware chain
 		this.middlewareChain = [];
@@ -123,67 +128,103 @@ export class ArcadeMCPServer {
 		args: Record<string, unknown>,
 		extra: ServerExtra,
 	): Promise<CallToolResult> {
-		// Build tool context with secrets
-		const toolCtxData = this.buildToolContext(tool);
+		const environment = this.settings?.arcade.environment ?? "dev";
+		const spanAttributes = {
+			tool_name: tool.fullyQualifiedName,
+			toolkit_name: tool.name,
+			environment,
+		};
 
-		// Build Context
-		const context = new Context(extra, {
-			requestId: String(extra.requestId ?? crypto.randomUUID()),
-			sessionId: extra.sessionId,
-			resourceOwner: this.extractResourceOwner(extra),
-			toolContext: toolCtxData,
-		});
+		// Increment tool_call counter
+		this.telemetry?.toolCallCounter?.add(1, spanAttributes);
 
-		// Set as current context
-		const prevCtx = setCurrentContext(context);
+		const tracer = this.telemetry?.enabled
+			? this.telemetry.getTracer("arcade-mcp-server")
+			: undefined;
 
-		try {
-			// Build middleware context
-			const mwContext: MiddlewareContext = {
-				method: "tools/call",
-				params: { name: tool.fullyQualifiedName, arguments: args },
-				source: "client",
-				type: "request",
-				timestamp: new Date(),
-				requestId: context.requestId,
-				sessionId: context.sessionId,
-				metadata: {},
-			};
+		const executeInner = async (): Promise<CallToolResult> => {
+			// Build tool context with secrets
+			const toolCtxData = this.buildToolContext(tool);
 
-			// The final handler that actually runs the tool
-			const finalHandler: CallNext = async () => {
-				const result = await runTool(tool, args, context);
+			// Build Context
+			const context = new Context(extra, {
+				requestId: String(extra.requestId ?? crypto.randomUUID()),
+				sessionId: extra.sessionId,
+				resourceOwner: this.extractResourceOwner(extra),
+				toolContext: toolCtxData,
+			});
 
-				if (result.success) {
-					return toCallToolResult(result.value);
+			// Set as current context
+			const prevCtx = setCurrentContext(context);
+
+			try {
+				// Build middleware context
+				const mwContext: MiddlewareContext = {
+					method: "tools/call",
+					params: { name: tool.fullyQualifiedName, arguments: args },
+					source: "client",
+					type: "request",
+					timestamp: new Date(),
+					requestId: context.requestId,
+					sessionId: context.sessionId,
+					metadata: {},
+				};
+
+				// The final handler that actually runs the tool
+				const finalHandler: CallNext = async () => {
+					const result = await runTool(tool, args, context);
+
+					if (result.success) {
+						return toCallToolResult(result.value);
+					}
+
+					// Tool execution failed
+					return {
+						content: [
+							{
+								type: "text" as const,
+								text: result.error?.message ?? "Tool execution failed",
+							},
+						],
+						isError: true,
+					};
+				};
+
+				// Apply middleware chain
+				if (this.middlewareChain.length > 0) {
+					const wrappedHandler = applyMiddleware(
+						this.middlewareChain as never[],
+						finalHandler,
+					);
+					const result = await wrappedHandler(mwContext);
+					return result as CallToolResult;
 				}
 
-				// Tool execution failed
-				return {
-					content: [
-						{
-							type: "text" as const,
-							text: result.error?.message ?? "Tool execution failed",
-						},
-					],
-					isError: true,
-				};
-			};
-
-			// Apply middleware chain
-			if (this.middlewareChain.length > 0) {
-				const wrappedHandler = applyMiddleware(
-					this.middlewareChain as never[],
-					finalHandler,
-				);
-				const result = await wrappedHandler(mwContext);
-				return result as CallToolResult;
+				return (await finalHandler(mwContext)) as CallToolResult;
+			} finally {
+				setCurrentContext(prevCtx);
 			}
+		};
 
-			return (await finalHandler(mwContext)) as CallToolResult;
-		} finally {
-			setCurrentContext(prevCtx);
+		if (!tracer) {
+			return executeInner();
 		}
+
+		return tracer.startActiveSpan("RunTool", async (span) => {
+			span.setAttributes(spanAttributes);
+			try {
+				const result = await executeInner();
+				return result;
+			} catch (err) {
+				span.setStatus({ code: SpanStatusCode.ERROR });
+				if (err instanceof Error) {
+					span.recordException(err);
+				}
+				throw err;
+			} finally {
+				span.end();
+			}
+		});
 	}
 
 	/**

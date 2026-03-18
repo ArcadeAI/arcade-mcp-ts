@@ -71,6 +71,8 @@ export { JWTResourceServerValidator } from "./resource-server/jwt-validator.js";
 export { ArcadeMCPServer } from "./server.js";
 // ── Settings ─────────────────────────────────────────────
 export { loadSettings, type MCPSettings } from "./settings.js";
+// ── Telemetry ────────────────────────────────────────────
+export { OTELHandler, type OTELHandlerOptions } from "./telemetry.js";
 export { type HttpOptions, runHttp } from "./transports/http.js";
 
 // ── Transports ───────────────────────────────────────────
