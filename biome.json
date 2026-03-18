@@ -18,6 +18,6 @@
 		"indentStyle": "tab"
 	},
 	"files": {
-		"includes": ["**", "!**/dist", "!**/node_modules"]
+		"includes": ["**", "!**/dist", "!**/node_modules", "!conductor.json"]
 	}
 }
