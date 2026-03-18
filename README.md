@@ -289,36 +289,6 @@ All settings load from environment variables:
 
 See [`.env.example`](.env.example) for the full list.
 
-## Project Structure
-
-```
-src/
-├── index.ts              # Public barrel export
-├── mcp-app.ts            # MCPApp builder API
-├── server.ts             # ArcadeMCPServer (wraps SDK's McpServer)
-├── context.ts            # Context with namespaced facades
-├── catalog.ts            # ToolCatalog + MaterializedTool
-├── executor.ts           # Tool execution pipeline
-├── errors.ts             # Error hierarchy
-├── settings.ts           # Env-based settings
-├── types.ts              # Shared interfaces
-├── auth/                 # OAuth provider factory functions
-├── middleware/            # Composable middleware system
-├── resource-server/      # JWT Bearer token validation
-├── worker/               # Worker routes for Arcade Cloud
-└── transports/           # Stdio and HTTP runners
-```
-
-## Development
-
-```bash
-bun install            # install dependencies
-bun test               # run tests (95 tests)
-bun run typecheck      # type check with tsc
-bun run lint           # lint + format with biome
-bun run build          # compile to dist/
-```
-
 ## License
 
 MIT
