@@ -40,6 +40,7 @@ TypeScript port of the Python `arcade-mcp` framework. Wraps `@modelcontextprotoc
 
 After any new feature, bug fix, refactor, or other code change:
 
+- **Lint/format** — Run `bunx biome check --write .` before committing
 - **README.md** — Check if the README needs updating (new features, changed APIs, new config options, updated examples)
 - **CLAUDE.md** — Check if this file needs updating (new architecture components, changed conventions, new commands)
 
