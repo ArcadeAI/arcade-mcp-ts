@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Elysia } from "elysia";
+import { registerAuthDiscoveryRoutes } from "../auth/routes.js";
 import type { EventStore } from "../event-store.js";
 import { createLogger } from "../logger.js";
 import type { ArcadeMCPServer } from "../server.js";
@@ -133,16 +134,8 @@ export async function startHttp(
   });
 
   // OAuth discovery endpoint (RFC 9728)
-  if (options?.auth?.supportsOAuthDiscovery?.()) {
-    app.get("/.well-known/oauth-protected-resource", () => {
-      const metadata = options?.auth?.getResourceMetadata?.();
-      if (metadata) {
-        return new Response(JSON.stringify(metadata), {
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response(null, { status: 404 });
-    });
+  if (options?.auth) {
+    registerAuthDiscoveryRoutes(app, options.auth);
   }
 
   app.listen({ hostname: host, port });

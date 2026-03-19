@@ -408,7 +408,7 @@ const app = new MCPApp({
 app.run({ transport: "http", port: 8000 });
 ```
 
-Supports RFC 9728 OAuth Protected Resource Metadata discovery.
+Supports RFC 9728 OAuth Protected Resource Metadata discovery. When `canonicalUrl` has a non-root path (e.g. `https://example.com/mcp`), both `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp` are registered for backward compatibility. Responses include CORS headers.
 
 ## Resumable Streams
 
