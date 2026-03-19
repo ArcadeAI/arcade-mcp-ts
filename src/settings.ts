@@ -7,6 +7,9 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { LogFormat } from "./logger.js";
+import { createLogger } from "./logger.js";
+
+const logger = createLogger("arcade-mcp-settings");
 
 export interface NotificationSettings {
   rateLimitPerMinute: number;
@@ -115,7 +118,11 @@ function parseAuthorizationServers(): AuthorizationServerConfig[] | undefined {
   if (!raw) return undefined;
   try {
     return JSON.parse(raw) as AuthorizationServerConfig[];
-  } catch {
+  } catch (err) {
+    logger.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      "Failed to parse MCP_RESOURCE_SERVER_AUTHORIZATION_SERVERS JSON — ignoring",
+    );
     return undefined;
   }
 }
