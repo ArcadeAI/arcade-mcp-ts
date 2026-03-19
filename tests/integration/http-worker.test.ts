@@ -78,7 +78,9 @@ describe("HTTP worker route integration", () => {
       });
       expect(toolsRes.status).toBe(200);
       const tools = await toolsRes.json();
-      expect(tools.tools.length).toBeGreaterThanOrEqual(3);
+      // Response is now a bare array matching Python format
+      expect(Array.isArray(tools)).toBe(true);
+      expect(tools.length).toBeGreaterThanOrEqual(3);
     } finally {
       serverProcess.kill();
     }

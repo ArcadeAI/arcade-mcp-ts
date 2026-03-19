@@ -570,9 +570,16 @@ const workerApp = createWorkerRoutes({
 
 | Endpoint | Method | Auth | Description |
 |---|---|---|---|
-| `/worker/tools` | GET | Bearer | List available tools |
+| `/worker/tools` | GET | Bearer | List available tools (bare array) |
 | `/worker/tools/invoke` | POST | Bearer | Execute a tool |
 | `/worker/health` | GET | None | Health check |
+
+The worker wire format matches the Python `arcade-mcp` framework exactly:
+
+- **`GET /worker/tools`** returns a bare JSON array of tool definitions (not wrapped in `{ tools: [...] }`), using `input.parameters` with `value_schema` (not JSON Schema `inputSchema`), `fully_qualified_name`, `requirements`, and `output` fields.
+- **`POST /worker/tools/invoke`** accepts `{ tool: { name, toolkit, version }, inputs, context: { user_id, authorization, secrets, metadata }, run_id, execution_id, created_at }`.
+- **Responses** use `snake_case` field names (`execution_id`, `finished_at`) and structured `output: { value, error: { message, kind, can_retry, ... }, requires_authorization }`.
+- **Tool name separator** defaults to `.` (e.g., `MyToolkit.echo`), configurable via `ARCADE_TOOL_NAME_SEPARATOR`.
 
 ## Error Handling
 
@@ -781,6 +788,7 @@ All settings load from environment variables:
 | `ARCADE_API_KEY` | — | Arcade API key |
 | `ARCADE_API_URL` | `https://api.arcade.dev` | Arcade API URL |
 | `ARCADE_USER_ID` | — | Default user ID |
+| `ARCADE_TOOL_NAME_SEPARATOR` | `.` | Separator between toolkit and tool name in FQN |
 
 See [`.env.example`](.env.example) for the full list.
 

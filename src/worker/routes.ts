@@ -2,13 +2,19 @@ import { SpanStatusCode } from "@opentelemetry/api";
 import { Elysia } from "elysia";
 import * as jose from "jose";
 import type { ToolCatalog } from "../catalog.js";
-import { toToolDefinition } from "../catalog.js";
 import { Context } from "../context.js";
 import { ServerError } from "../exceptions.js";
 import { runTool } from "../executor.js";
 import { createLogger } from "../logger.js";
 import type { OTELHandler } from "../telemetry.js";
-import type { ToolCallRequest, ToolCallResponse } from "../types.js";
+import { TOOL_NAME_SEPARATOR } from "../types.js";
+import { toWorkerToolDefinition } from "./convert.js";
+import type {
+  WorkerToolCallOutput,
+  WorkerToolCallRequest,
+  WorkerToolCallResponse,
+  WorkerToolDefinition,
+} from "./types.js";
 
 const logger = createLogger("arcade-mcp-worker");
 
@@ -20,7 +26,7 @@ export interface WorkerRoutesOptions {
 }
 
 /**
- * Create Elysia worker routes for /worker/v1/*.
+ * Create Elysia worker routes for /worker/*.
  * Protected by ARCADE_WORKER_SECRET Bearer token.
  */
 // biome-ignore lint/suspicious/noExplicitAny: Elysia generic prefix typing
@@ -57,7 +63,7 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
     }
   }
 
-  // GET /worker/tools — list available tools
+  // GET /worker/tools — list available tools (returns bare array like Python)
   app.get("/tools", async ({ request }) => {
     if (!(await validateWorkerAuth(request))) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -66,12 +72,12 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
       });
     }
 
-    const getCatalog = () => {
-      const tools = [];
+    const getCatalog = (): WorkerToolDefinition[] => {
+      const tools: WorkerToolDefinition[] = [];
       for (const tool of catalog.getAll()) {
-        tools.push(toToolDefinition(tool));
+        tools.push(toWorkerToolDefinition(tool));
       }
-      return { tools };
+      return tools;
     };
 
     const tracer = telemetry?.enabled
@@ -97,15 +103,19 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
       });
     }
 
-    const body = (await request.json()) as ToolCallRequest;
-    const executionId = crypto.randomUUID();
+    const body = (await request.json()) as WorkerToolCallRequest;
+
+    // Use execution_id from request if provided (Engine sets this), otherwise generate
+    const executionId = body.execution_id ?? crypto.randomUUID();
     const startTime = performance.now();
 
-    const tool = catalog.getTool(body.name);
+    // Resolve tool by fully-qualified name: toolkit.tool_name
+    const fqn = `${body.tool.toolkit}${TOOL_NAME_SEPARATOR}${body.tool.name}`;
+    const tool = catalog.getTool(fqn) ?? catalog.getTool(body.tool.name);
     if (!tool) {
       return new Response(
         JSON.stringify({
-          error: `Tool '${body.name}' not found`,
+          error: `Tool '${fqn}' not found`,
         }),
         {
           status: 404,
@@ -148,10 +158,10 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
       const context = new Context(fakeExtra as never, {
         requestId: executionId,
         toolContext: {
-          authToken: body.context?.authorization?.token,
+          authToken: body.context?.authorization?.token ?? undefined,
           secrets,
           metadata: {},
-          userId: body.userId,
+          userId: body.context?.user_id ?? undefined,
         },
       });
 
@@ -159,20 +169,52 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 
       const duration = performance.now() - startTime;
 
-      const response: ToolCallResponse = {
-        executionId,
+      // Build output matching Python's ToolCallOutput structure
+      const output: WorkerToolCallOutput = result.success
+        ? { value: result.value, error: null, requires_authorization: null }
+        : {
+            value: null,
+            error: result.error
+              ? {
+                  message: result.error.message,
+                  kind: result.error.kind ?? "tool_runtime_fatal",
+                  developer_message: null,
+                  can_retry: result.error.canRetry ?? false,
+                  additional_prompt_content:
+                    result.error.additionalPromptContent ?? null,
+                  retry_after_ms: result.error.retryAfterMs ?? null,
+                  stacktrace: result.error.extra?.stacktrace
+                    ? String(result.error.extra.stacktrace)
+                    : null,
+                  status_code: result.error.statusCode ?? null,
+                  extra: result.error.extra ?? null,
+                }
+              : {
+                  message: "Unknown error",
+                  kind: "tool_runtime_fatal",
+                  can_retry: false,
+                  developer_message: null,
+                  additional_prompt_content: null,
+                  retry_after_ms: null,
+                  stacktrace: null,
+                  status_code: null,
+                  extra: null,
+                },
+            requires_authorization: null,
+          };
+
+      const response: WorkerToolCallResponse = {
+        execution_id: executionId,
         duration,
-        finishedAt: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
         success: result.success,
-        output: result.success
-          ? { value: result.value }
-          : { error: result.error?.message },
+        output,
       };
 
       logger.info(
         {
-          tool: body.name,
-          executionId,
+          tool: fqn,
+          execution_id: executionId,
           duration: `${duration.toFixed(1)}ms`,
           success: result.success,
         },
@@ -190,7 +232,7 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 
     return tracer.startActiveSpan("CallTool", async (span) => {
       span.setAttributes({
-        tool_name: body.name,
+        tool_name: fqn,
         toolkit_name: tool.name,
         environment,
       });

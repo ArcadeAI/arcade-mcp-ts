@@ -55,7 +55,7 @@ function makeSettings(
 function makeAuthTool(): MaterializedTool {
   return {
     name: "star_repo",
-    fullyQualifiedName: "github_star_repo",
+    fullyQualifiedName: "github.star_repo",
     description: "Star a repo",
     handler: async (_args, ctx) => {
       return { token: ctx.getAuthToken() };

@@ -11,7 +11,7 @@ import type { MaterializedTool } from "../src/types.js";
 function makeTool(overrides: Partial<MaterializedTool> = {}): MaterializedTool {
   return {
     name: "test_tool",
-    fullyQualifiedName: "TestKit_test_tool",
+    fullyQualifiedName: "TestKit.test_tool",
     description: "A test tool",
     handler: async () => "ok",
     parameters: z.object({ msg: z.string() }),

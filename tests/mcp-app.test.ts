@@ -40,7 +40,7 @@ describe("MCPApp", () => {
     );
 
     expect(app.catalog.size).toBe(1);
-    expect(app.catalog.has("Test_echo")).toBe(true);
+    expect(app.catalog.has("Test.echo")).toBe(true);
   });
 
   it("supports method chaining", () => {
@@ -76,7 +76,7 @@ describe("MCPApp", () => {
       async () => {},
     );
 
-    const tool = app.catalog.getTool("Test_star_repo")!;
+    const tool = app.catalog.getTool("Test.star_repo")!;
     expect(tool.auth?.providerId).toBe("github");
     expect(tool.secrets).toEqual(["GITHUB_TOKEN"]);
   });

@@ -81,7 +81,7 @@ async function main() {
     userMessage: "What's the weather like in London right now?",
     expectedToolCalls: [
       {
-        toolName: "Weather_get_current_weather",
+        toolName: "Weather.get_current_weather",
         args: { city: "London" },
       },
     ],
@@ -95,7 +95,7 @@ async function main() {
       "What's the current temperature in Tokyo? Give it to me in celsius.",
     expectedToolCalls: [
       {
-        toolName: "Weather_get_current_weather",
+        toolName: "Weather.get_current_weather",
         args: { city: "Tokyo", units: "celsius" },
       },
     ],
@@ -111,7 +111,7 @@ async function main() {
     userMessage: "Give me a 5 day forecast for Paris",
     expectedToolCalls: [
       {
-        toolName: "Weather_get_forecast",
+        toolName: "Weather.get_forecast",
         args: { city: "Paris", days: 5 },
       },
     ],
