@@ -1,8 +1,10 @@
 import { Elysia } from "elysia";
 import { registerAuthDiscoveryRoutes } from "../auth/routes.js";
+import type { ToolCatalog } from "../catalog.js";
 import type { EventStore } from "../event-store.js";
 import { createLogger } from "../logger.js";
 import type { ArcadeMCPServer } from "../server.js";
+import type { OTELHandler } from "../telemetry.js";
 import type {
   ResourceOwner,
   ResourceServerValidatorInterface,
@@ -20,6 +22,12 @@ export interface HttpOptions {
   stateless?: boolean;
   sessionTtlMs?: number;
   maxSessions?: number;
+  /** When set, worker routes are mounted at /worker/*. */
+  workerSecret?: string;
+  /** Tool catalog — required when workerSecret is set. */
+  catalog?: ToolCatalog;
+  /** Optional telemetry handler forwarded to worker routes. */
+  telemetry?: OTELHandler;
 }
 
 /**
@@ -100,6 +108,20 @@ export async function startHttp(
   // OAuth discovery endpoint (RFC 9728)
   if (options?.auth) {
     registerAuthDiscoveryRoutes(app, options.auth);
+  }
+
+  // Worker routes — conditionally mounted when a secret is provided
+  if (options?.workerSecret && options.catalog) {
+    const { createWorkerRoutes } = await import("../worker/routes.js");
+    const workerApp = createWorkerRoutes({
+      catalog: options.catalog,
+      secret: options.workerSecret,
+      telemetry: options.telemetry,
+    });
+    app.use(workerApp);
+    logger.info(
+      "Worker routes enabled at /worker/* (ARCADE_WORKER_SECRET is set)",
+    );
   }
 
   app.listen({ hostname: host, port });

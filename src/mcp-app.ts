@@ -244,6 +244,9 @@ export class MCPApp {
         stateless: transportOptions?.stateless,
         sessionTtlMs: transportOptions?.sessionTtlMs,
         maxSessions: transportOptions?.maxSessions,
+        workerSecret: this._settings.arcade.serverSecret,
+        catalog: this._catalog,
+        telemetry: this._telemetry,
       });
     }
   }
@@ -292,6 +295,9 @@ export class MCPApp {
     let handle: HttpHandle = await startHttp(this._server, {
       ...options,
       auth: this._auth,
+      workerSecret: this._settings.arcade.serverSecret,
+      catalog: this._catalog,
+      telemetry: this._telemetry,
     });
 
     logger.info("Dev mode enabled — watching for file changes...");
@@ -313,6 +319,9 @@ export class MCPApp {
         handle = await startHttp(this._server, {
           ...options,
           auth: this._auth,
+          workerSecret: this._settings.arcade.serverSecret,
+          catalog: this._catalog,
+          telemetry: this._telemetry,
         });
 
         logger.info("Server reloaded successfully.");
