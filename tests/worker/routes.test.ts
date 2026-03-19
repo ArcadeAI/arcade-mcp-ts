@@ -1,3 +1,4 @@
+import * as jose from "jose";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ToolCatalog } from "../../src/catalog.js";
@@ -5,6 +6,19 @@ import { createWorkerRoutes } from "../../src/worker/routes.js";
 
 const BASE = "http://localhost";
 const WORKER_SECRET = "test-worker-secret";
+const SECRET_KEY = new TextEncoder().encode(WORKER_SECRET);
+
+async function createWorkerJWT(
+	secret = SECRET_KEY,
+	claims: Record<string, unknown> = {},
+): Promise<string> {
+	return new jose.SignJWT({ ver: "1", ...claims })
+		.setProtectedHeader({ alg: "HS256" })
+		.setAudience("worker")
+		.setIssuedAt()
+		.setExpirationTime("5m")
+		.sign(secret);
+}
 
 function makeCatalog(): ToolCatalog {
 	const catalog = new ToolCatalog();
@@ -27,8 +41,8 @@ function makeApp(options?: { secret?: string; catalog?: ToolCatalog }) {
 	});
 }
 
-function authHeaders(secret = WORKER_SECRET): HeadersInit {
-	return { Authorization: `Bearer ${secret}` };
+function authHeaders(token: string): HeadersInit {
+	return { Authorization: `Bearer ${token}` };
 }
 
 // ── Health check ────────────────────────────────────────
@@ -60,21 +74,66 @@ describe("worker auth", () => {
 		expect(res.status).toBe(401);
 	});
 
-	it("rejects requests with wrong Bearer token", async () => {
+	it("rejects requests with wrong signing key", async () => {
 		const app = makeApp();
+		const wrongKey = new TextEncoder().encode("wrong-secret");
+		const jwt = await createWorkerJWT(wrongKey);
 		const res = await app.handle(
 			new Request(`${BASE}/worker/tools`, {
-				headers: authHeaders("wrong-secret"),
+				headers: authHeaders(jwt),
 			}),
 		);
 		expect(res.status).toBe(401);
 	});
 
-	it("allows requests with correct Bearer token", async () => {
+	it("rejects requests with raw secret instead of JWT", async () => {
 		const app = makeApp();
 		const res = await app.handle(
 			new Request(`${BASE}/worker/tools`, {
-				headers: authHeaders(),
+				headers: authHeaders(WORKER_SECRET),
+			}),
+		);
+		expect(res.status).toBe(401);
+	});
+
+	it("rejects JWT with wrong audience", async () => {
+		const app = makeApp();
+		const jwt = await new jose.SignJWT({ ver: "1" })
+			.setProtectedHeader({ alg: "HS256" })
+			.setAudience("not-worker")
+			.setIssuedAt()
+			.setExpirationTime("5m")
+			.sign(SECRET_KEY);
+		const res = await app.handle(
+			new Request(`${BASE}/worker/tools`, {
+				headers: authHeaders(jwt),
+			}),
+		);
+		expect(res.status).toBe(401);
+	});
+
+	it("rejects JWT with wrong ver claim", async () => {
+		const app = makeApp();
+		const jwt = await new jose.SignJWT({ ver: "999" })
+			.setProtectedHeader({ alg: "HS256" })
+			.setAudience("worker")
+			.setIssuedAt()
+			.setExpirationTime("5m")
+			.sign(SECRET_KEY);
+		const res = await app.handle(
+			new Request(`${BASE}/worker/tools`, {
+				headers: authHeaders(jwt),
+			}),
+		);
+		expect(res.status).toBe(401);
+	});
+
+	it("allows requests with valid JWT", async () => {
+		const app = makeApp();
+		const jwt = await createWorkerJWT();
+		const res = await app.handle(
+			new Request(`${BASE}/worker/tools`, {
+				headers: authHeaders(jwt),
 			}),
 		);
 		expect(res.status).toBe(200);
@@ -92,8 +151,9 @@ describe("worker auth", () => {
 describe("GET /worker/tools", () => {
 	it("returns registered tools", async () => {
 		const app = makeApp();
+		const jwt = await createWorkerJWT();
 		const res = await app.handle(
-			new Request(`${BASE}/worker/tools`, { headers: authHeaders() }),
+			new Request(`${BASE}/worker/tools`, { headers: authHeaders(jwt) }),
 		);
 		const body = await res.json();
 
@@ -105,8 +165,9 @@ describe("GET /worker/tools", () => {
 
 	it("returns empty array when no tools registered", async () => {
 		const app = makeApp({ catalog: new ToolCatalog() });
+		const jwt = await createWorkerJWT();
 		const res = await app.handle(
-			new Request(`${BASE}/worker/tools`, { headers: authHeaders() }),
+			new Request(`${BASE}/worker/tools`, { headers: authHeaders(jwt) }),
 		);
 		const body = await res.json();
 
@@ -119,8 +180,11 @@ describe("GET /worker/tools", () => {
 describe("POST /worker/tools/invoke", () => {
 	const envSnapshot: Record<string, string | undefined> = {};
 
-	beforeEach(() => {
+	let validJWT: string;
+
+	beforeEach(async () => {
 		envSnapshot.TEST_WORKER_API_KEY = process.env.TEST_WORKER_API_KEY;
+		validJWT = await createWorkerJWT();
 	});
 
 	afterEach(() => {
@@ -133,12 +197,12 @@ describe("POST /worker/tools/invoke", () => {
 
 	function invokeRequest(
 		body: Record<string, unknown>,
-		secret = WORKER_SECRET,
+		token?: string,
 	): Request {
 		return new Request(`${BASE}/worker/tools/invoke`, {
 			method: "POST",
 			headers: {
-				...authHeaders(secret),
+				...authHeaders(token ?? validJWT),
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(body),
