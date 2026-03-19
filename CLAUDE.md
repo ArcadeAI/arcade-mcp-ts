@@ -15,7 +15,8 @@ TypeScript port of the Python `arcade-mcp` framework, published as `@arcadeai/ar
 
 - **`src/cli.ts`** — CLI entry point with auto-discovery (`npx @arcadeai/arcade-mcp`)
 - **`src/mcp-app.ts`** — `MCPApp` high-level builder API (entry point for users)
-- **`src/server.ts`** — `ArcadeMCPServer` wrapping SDK's `McpServer`
+- **`src/server.ts`** — `ArcadeMCPServer` wrapping SDK's `McpServer`, session registry
+- **`src/session.ts`** — `ServerSession` (state machine, server-initiated requests), `RequestManager`, `NotificationManager`
 - **`src/context.ts`** — `Context` with namespaced facades (log, progress, sampling, ui, etc.)
 - **`src/logger.ts`** — Shared `createLogger()` factory with JSON/pretty format support (`MCP_LOG_FORMAT`)
 - **`src/catalog.ts`** — `ToolCatalog` + `MaterializedTool` storage

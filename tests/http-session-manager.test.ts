@@ -14,6 +14,8 @@ function createMockServer() {
 
   return {
     createSessionServer: vi.fn().mockReturnValue(mockMcpServer),
+    registerSession: vi.fn(),
+    unregisterSession: vi.fn(),
     _mockMcpServer: mockMcpServer,
   };
 }

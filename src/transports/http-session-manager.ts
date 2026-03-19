@@ -13,12 +13,14 @@ import {
 import type { EventStore } from "../event-store.js";
 import { createLogger } from "../logger.js";
 import type { ArcadeMCPServer } from "../server.js";
+import { ServerSession } from "../session.js";
 
 const logger = createLogger("arcade-mcp-session-manager");
 
 interface SessionEntry {
   transport: WebStandardStreamableHTTPServerTransport;
   mcpServer: McpServer;
+  session: ServerSession;
   createdAt: number;
   lastAccessedAt: number;
 }
@@ -93,6 +95,8 @@ export class HTTPSessionManager {
     const closePromises = [...this.sessions.entries()].map(
       async ([id, entry]) => {
         this.sessions.delete(id);
+        entry.session.close();
+        this.server.unregisterSession(id);
         await entry.transport.close().catch(() => {});
         await entry.mcpServer.close().catch(() => {});
       },
@@ -184,12 +188,18 @@ export class HTTPSessionManager {
         eventStore: this.eventStore,
         onsessioninitialized: (id: string) => {
           const now = Date.now();
+          const session = new ServerSession({
+            sessionId: id,
+            mcpServer: sessionServer,
+          });
           this.sessions.set(id, {
             transport,
             mcpServer: sessionServer,
+            session,
             createdAt: now,
             lastAccessedAt: now,
           });
+          this.server.registerSession(id, session);
           this.resetTtlTimer(id);
           logger.debug({ sessionId: id }, "Session created");
         },
@@ -237,6 +247,8 @@ export class HTTPSessionManager {
     const entry = this.sessions.get(sessionId);
     if (entry) {
       this.sessions.delete(sessionId);
+      entry.session.close();
+      this.server.unregisterSession(sessionId);
       entry.transport.close().catch(() => {});
       entry.mcpServer.close().catch(() => {});
       logger.debug({ sessionId }, "Session evicted");

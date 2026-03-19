@@ -2,6 +2,7 @@ import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolAuthorization } from "./auth/types.js";
 import { AuthorizationError, NotFoundError } from "./exceptions.js";
 import { createLogger } from "./logger.js";
+import type { ServerSession } from "./session.js";
 import type { ResourceOwner } from "./types.js";
 
 /**
@@ -64,6 +65,7 @@ export class Context {
   private _resourceOwner?: ResourceOwner;
   private _requestId: string;
   private _sessionId?: string;
+  private _serverSession?: ServerSession;
 
   constructor(
     extra: ServerExtra,
@@ -72,12 +74,14 @@ export class Context {
       sessionId?: string;
       resourceOwner?: ResourceOwner;
       toolContext?: ToolContextData;
+      serverSession?: ServerSession;
     },
   ) {
     this._extra = extra;
     this._requestId = options?.requestId ?? crypto.randomUUID();
     this._sessionId = options?.sessionId;
     this._resourceOwner = options?.resourceOwner;
+    this._serverSession = options?.serverSession;
     this._toolContext = options?.toolContext ?? {
       secrets: {},
       metadata: {},
@@ -116,6 +120,10 @@ export class Context {
 
   get extra(): ServerExtra {
     return this._extra;
+  }
+
+  get serverSession(): ServerSession | undefined {
+    return this._serverSession;
   }
 
   /**
@@ -258,7 +266,7 @@ export class Tools extends ContextComponent {
  * Sampling facade: context.sampling.createMessage()
  */
 export class Sampling extends ContextComponent {
-  async createMessage(_options: {
+  async createMessage(options: {
     messages: Array<{
       role: "user" | "assistant";
       content: { type: "text"; text: string };
@@ -267,7 +275,15 @@ export class Sampling extends ContextComponent {
     temperature?: number;
     maxTokens?: number;
   }): Promise<unknown> {
-    // Delegate to MCP sampling via session
+    const session = this.ctx.serverSession;
+    if (session?.isInitialized) {
+      return session.createMessage({
+        messages: options.messages,
+        systemPrompt: options.systemPrompt,
+        temperature: options.temperature,
+        maxTokens: options.maxTokens ?? 1024,
+      });
+    }
     return undefined;
   }
 }
@@ -277,10 +293,16 @@ export class Sampling extends ContextComponent {
  */
 export class UI extends ContextComponent {
   async elicit(
-    _message: string,
-    _schema?: Record<string, unknown>,
+    message: string,
+    schema?: Record<string, unknown>,
   ): Promise<unknown> {
-    // Delegate to MCP elicitation via session
+    const session = this.ctx.serverSession;
+    if (session?.isInitialized) {
+      return session.elicitInput({
+        message,
+        requestedSchema: schema,
+      } as never);
+    }
     return undefined;
   }
 }
