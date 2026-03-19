@@ -2,6 +2,7 @@
 
 // ── Auth ─────────────────────────────────────────────────
 export * as auth from "./auth/index.js";
+export { registerAuthDiscoveryRoutes } from "./auth/routes.js";
 export type { AuthProviderType, ToolAuthorization } from "./auth/types.js";
 export { normalizeVersion, ToolCatalog, toToolDefinition } from "./catalog.js";
 // ── CLI / Discovery ─────────────────────────────────────
@@ -112,6 +113,11 @@ export {
   runHttp,
   startHttp,
 } from "./transports/http.js";
+
+export {
+  HTTPSessionManager,
+  type HTTPSessionManagerOptions,
+} from "./transports/http-session-manager.js";
 // ── Transports ───────────────────────────────────────────
 export { setupGracefulShutdown } from "./transports/shutdown.js";
 export { runStdio } from "./transports/stdio.js";

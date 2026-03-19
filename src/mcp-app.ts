@@ -211,9 +211,12 @@ export class MCPApp {
         host,
         port,
         eventStore: options?.eventStore,
+        stateless: options?.stateless,
+        sessionTtlMs: options?.sessionTtlMs,
+        maxSessions: options?.maxSessions,
       });
     } else {
-      await this._runOnce(transport, host, port, options?.eventStore);
+      await this._runOnce(transport, host, port, options);
     }
   }
 
@@ -224,7 +227,7 @@ export class MCPApp {
     transport: "stdio" | "http",
     host: string,
     port: number,
-    eventStore?: import("./event-store.js").EventStore,
+    transportOptions?: TransportOptions,
   ): Promise<void> {
     this._server = this._createServer();
 
@@ -233,7 +236,15 @@ export class MCPApp {
       await runStdio(this._server);
     } else {
       const { runHttp } = await import("./transports/http.js");
-      await runHttp(this._server, { host, port, auth: this._auth, eventStore });
+      await runHttp(this._server, {
+        host,
+        port,
+        auth: this._auth,
+        eventStore: transportOptions?.eventStore,
+        stateless: transportOptions?.stateless,
+        sessionTtlMs: transportOptions?.sessionTtlMs,
+        maxSessions: transportOptions?.maxSessions,
+      });
     }
   }
 
@@ -269,6 +280,9 @@ export class MCPApp {
     host: string;
     port: number;
     eventStore?: import("./event-store.js").EventStore;
+    stateless?: boolean;
+    sessionTtlMs?: number;
+    maxSessions?: number;
   }): Promise<void> {
     const { startHttp } = await import("./transports/http.js");
     const { watchForChanges } = await import("./transports/dev-reload.js");

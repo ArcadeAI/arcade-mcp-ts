@@ -408,7 +408,7 @@ const app = new MCPApp({
 app.run({ transport: "http", port: 8000 });
 ```
 
-Supports RFC 9728 OAuth Protected Resource Metadata discovery.
+Supports RFC 9728 OAuth Protected Resource Metadata discovery. When `canonicalUrl` has a non-root path (e.g. `https://example.com/mcp`), both `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp` are registered for backward compatibility. Responses include CORS headers.
 
 ## Resumable Streams
 
@@ -442,6 +442,41 @@ class RedisEventStore implements EventStore {
     // Replay from Redis...
   }
 }
+```
+
+## Session Management
+
+The HTTP transport uses an `HTTPSessionManager` that supports stateful (default) and stateless modes, TTL-based session eviction, and max session caps:
+
+```typescript
+app.run({
+  transport: "http",
+  stateless: false,       // true = fresh transport per request, no session reuse
+  sessionTtlMs: 300_000,  // evict idle sessions after 5 minutes
+  maxSessions: 100,       // reject new sessions with 503 when at capacity
+});
+```
+
+In **stateful mode** (default), sessions are reused via the `mcp-session-id` header. Invalid session IDs receive a 400 response.
+
+In **stateless mode**, every request gets a fresh transport and server — no sessions are tracked.
+
+You can also use `HTTPSessionManager` directly for more control:
+
+```typescript
+import { HTTPSessionManager } from "@arcadeai/arcade-mcp";
+
+const manager = new HTTPSessionManager({
+  server: arcadeMcpServer,
+  sessionTtlMs: 60_000,
+  maxSessions: 50,
+});
+
+// In your HTTP handler:
+const response = await manager.handleRequest(request, { authInfo });
+
+// Graceful shutdown:
+await manager.close();
 ```
 
 ## Worker Routes

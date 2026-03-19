@@ -173,6 +173,12 @@ export interface TransportOptions {
   port?: number;
   dev?: boolean;
   eventStore?: EventStore;
+  /** If true, create a fresh transport per request with no session reuse. */
+  stateless?: boolean;
+  /** Sliding-window TTL in ms per session. Undefined = no eviction. */
+  sessionTtlMs?: number;
+  /** Max concurrent sessions. Undefined = unlimited. */
+  maxSessions?: number;
 }
 
 /**
