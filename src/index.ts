@@ -2,6 +2,7 @@
 
 // ── Auth ─────────────────────────────────────────────────
 export * as auth from "./auth/index.js";
+export { registerAuthDiscoveryRoutes } from "./auth/routes.js";
 export type { AuthProviderType, ToolAuthorization } from "./auth/types.js";
 export { normalizeVersion, ToolCatalog, toToolDefinition } from "./catalog.js";
 // ── CLI / Discovery ─────────────────────────────────────
