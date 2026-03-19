@@ -103,6 +103,6 @@ describe("EvalToolRegistry", () => {
     registry.addFromCatalog(catalog);
 
     expect(registry.toolCount()).toBe(1);
-    expect(registry.hasTool("TestKit_greet")).toBe(true);
+    expect(registry.hasTool("TestKit.greet")).toBe(true);
   });
 });

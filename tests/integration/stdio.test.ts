@@ -23,13 +23,13 @@ describe("Stdio integration", () => {
     expect(tools.tools.length).toBeGreaterThanOrEqual(3);
 
     const toolNames = tools.tools.map((t) => t.name);
-    expect(toolNames).toContain("EchoServer_echo");
-    expect(toolNames).toContain("EchoServer_echo_upper");
-    expect(toolNames).toContain("EchoServer_reverse");
+    expect(toolNames).toContain("EchoServer.echo");
+    expect(toolNames).toContain("EchoServer.echo_upper");
+    expect(toolNames).toContain("EchoServer.reverse");
 
     // Call echo tool
     const echoResult = await client.callTool({
-      name: "EchoServer_echo",
+      name: "EchoServer.echo",
       arguments: { message: "Hello, world!" },
     });
     expect(echoResult.content).toEqual([
@@ -38,21 +38,21 @@ describe("Stdio integration", () => {
 
     // Call echo_upper tool
     const upperResult = await client.callTool({
-      name: "EchoServer_echo_upper",
+      name: "EchoServer.echo_upper",
       arguments: { message: "hello" },
     });
     expect(upperResult.content).toEqual([{ type: "text", text: "HELLO" }]);
 
     // Call reverse tool
     const reverseResult = await client.callTool({
-      name: "EchoServer_reverse",
+      name: "EchoServer.reverse",
       arguments: { text: "abc" },
     });
     expect(reverseResult.content).toEqual([{ type: "text", text: "cba" }]);
 
     // Test validation error
     const errorResult = await client.callTool({
-      name: "EchoServer_echo",
+      name: "EchoServer.echo",
       arguments: { message: 42 },
     });
     expect(errorResult.isError).toBe(true);

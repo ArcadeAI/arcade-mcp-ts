@@ -149,7 +149,7 @@ describe("worker auth", () => {
 // ── List tools ──────────────────────────────────────────
 
 describe("GET /worker/tools", () => {
-  it("returns registered tools", async () => {
+  it("returns registered tools as bare array (Python format)", async () => {
     const app = makeApp();
     const jwt = await createWorkerJWT();
     const res = await app.handle(
@@ -157,10 +157,20 @@ describe("GET /worker/tools", () => {
     );
     const body = await res.json();
 
-    expect(body.tools).toHaveLength(1);
-    expect(body.tools[0].name).toBe("echo");
-    expect(body.tools[0].description).toBe("Echo a message");
-    expect(body.tools[0].inputSchema).toHaveProperty("type", "object");
+    // Python returns a bare array, not { tools: [...] }
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(1);
+    expect(body[0].name).toBe("echo");
+    expect(body[0].fully_qualified_name).toBe("echo");
+    expect(body[0].description).toBe("Echo a message");
+    expect(body[0].input).toHaveProperty("parameters");
+    expect(body[0].input.parameters).toHaveLength(1);
+    expect(body[0].input.parameters[0].name).toBe("message");
+    expect(body[0].input.parameters[0].required).toBe(true);
+    expect(body[0].input.parameters[0].value_schema.val_type).toBe("string");
+    expect(body[0].output).toHaveProperty("available_modes");
+    expect(body[0].requirements).toHaveProperty("authorization");
+    expect(body[0].requirements).toHaveProperty("secrets");
   });
 
   it("returns empty array when no tools registered", async () => {
@@ -171,7 +181,8 @@ describe("GET /worker/tools", () => {
     );
     const body = await res.json();
 
-    expect(body.tools).toEqual([]);
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toEqual([]);
   });
 });
 
@@ -209,24 +220,45 @@ describe("POST /worker/tools/invoke", () => {
     });
   }
 
-  it("successfully invokes a tool and returns result", async () => {
+  it("successfully invokes a tool and returns result (Python format)", async () => {
     const app = makeApp();
     const res = await app.handle(
-      invokeRequest({ name: "echo", inputs: { message: "hello" } }),
+      invokeRequest({
+        tool: { name: "echo", toolkit: "" },
+        inputs: { message: "hello" },
+      }),
     );
     const body = await res.json();
 
     expect(body.success).toBe(true);
     expect(body.output.value).toBe("hello");
-    expect(body.executionId).toBeDefined();
+    expect(body.output.error).toBeNull();
+    expect(body.execution_id).toBeDefined();
     expect(body.duration).toBeGreaterThan(0);
-    expect(body.finishedAt).toBeDefined();
+    expect(body.finished_at).toBeDefined();
+  });
+
+  it("uses execution_id from request when provided", async () => {
+    const app = makeApp();
+    const res = await app.handle(
+      invokeRequest({
+        execution_id: "my-exec-id-123",
+        tool: { name: "echo", toolkit: "" },
+        inputs: { message: "hello" },
+      }),
+    );
+    const body = await res.json();
+
+    expect(body.execution_id).toBe("my-exec-id-123");
   });
 
   it("returns 404 for unknown tool", async () => {
     const app = makeApp();
     const res = await app.handle(
-      invokeRequest({ name: "nonexistent", inputs: {} }),
+      invokeRequest({
+        tool: { name: "nonexistent", toolkit: "unknown" },
+        inputs: {},
+      }),
     );
     expect(res.status).toBe(404);
 
@@ -248,14 +280,20 @@ describe("POST /worker/tools/invoke", () => {
     );
 
     const app = makeApp({ catalog });
-    const res = await app.handle(invokeRequest({ name: "fail", inputs: {} }));
+    const res = await app.handle(
+      invokeRequest({ tool: { name: "fail", toolkit: "" }, inputs: {} }),
+    );
     const body = await res.json();
 
     expect(body.success).toBe(false);
-    expect(body.output.error).toBe("kaboom");
+    expect(body.output.error).toBeDefined();
+    expect(body.output.error.message).toBe("kaboom");
+    expect(body.output.error.kind).toBe("tool_runtime_fatal");
+    expect(body.output.error.can_retry).toBe(false);
+    expect(body.output.value).toBeNull();
   });
 
-  it("passes userId from request body into context", async () => {
+  it("passes user_id from request context into context", async () => {
     const catalog = new ToolCatalog();
     catalog.addTool(
       "whoami",
@@ -268,7 +306,11 @@ describe("POST /worker/tools/invoke", () => {
 
     const app = makeApp({ catalog });
     const res = await app.handle(
-      invokeRequest({ name: "whoami", inputs: {}, userId: "user-42" }),
+      invokeRequest({
+        tool: { name: "whoami", toolkit: "" },
+        inputs: {},
+        context: { user_id: "user-42" },
+      }),
     );
     const body = await res.json();
 
@@ -290,7 +332,7 @@ describe("POST /worker/tools/invoke", () => {
     const app = makeApp({ catalog });
     const res = await app.handle(
       invokeRequest({
-        name: "authed_tool",
+        tool: { name: "authed_tool", toolkit: "" },
         inputs: {},
         context: {
           authorization: { token: "oauth-access-token-123" },
@@ -316,12 +358,15 @@ describe("POST /worker/tools/invoke", () => {
 
     const app = makeApp({ catalog });
     const res = await app.handle(
-      invokeRequest({ name: "authed_tool", inputs: {} }),
+      invokeRequest({
+        tool: { name: "authed_tool", toolkit: "" },
+        inputs: {},
+      }),
     );
     const body = await res.json();
 
     expect(body.success).toBe(false);
-    expect(body.output.error).toContain("Auth token not found");
+    expect(body.output.error.message).toContain("Auth token not found");
   });
 
   it("injects secrets declared by the tool from process.env", async () => {
@@ -340,7 +385,10 @@ describe("POST /worker/tools/invoke", () => {
 
     const app = makeApp({ catalog });
     const res = await app.handle(
-      invokeRequest({ name: "secret_reader", inputs: {} }),
+      invokeRequest({
+        tool: { name: "secret_reader", toolkit: "" },
+        inputs: {},
+      }),
     );
     const body = await res.json();
 
@@ -363,7 +411,7 @@ describe("POST /worker/tools/invoke", () => {
     const app = makeApp({ catalog });
     const res = await app.handle(
       invokeRequest({
-        name: "secret_reader",
+        tool: { name: "secret_reader", toolkit: "" },
         inputs: {},
         context: {
           secrets: [{ key: "CALLER_SECRET", value: "from-request" }],
@@ -393,7 +441,7 @@ describe("POST /worker/tools/invoke", () => {
     const app = makeApp({ catalog });
     const res = await app.handle(
       invokeRequest({
-        name: "secret_reader",
+        tool: { name: "secret_reader", toolkit: "" },
         inputs: {},
         context: {
           secrets: [{ key: "TEST_WORKER_API_KEY", value: "from-request" }],
@@ -427,7 +475,10 @@ describe("POST /worker/tools/invoke", () => {
 
     const app = makeApp({ catalog });
     const res = await app.handle(
-      invokeRequest({ name: "no_secrets", inputs: {} }),
+      invokeRequest({
+        tool: { name: "no_secrets", toolkit: "" },
+        inputs: {},
+      }),
     );
     const body = await res.json();
 
@@ -438,27 +489,39 @@ describe("POST /worker/tools/invoke", () => {
   it("returns validation error for invalid inputs", async () => {
     const app = makeApp();
     const res = await app.handle(
-      invokeRequest({ name: "echo", inputs: { message: 42 } }),
+      invokeRequest({
+        tool: { name: "echo", toolkit: "" },
+        inputs: { message: 42 },
+      }),
     );
     const body = await res.json();
 
     expect(body.success).toBe(false);
   });
 
-  it("response shape matches ToolCallResponse", async () => {
+  it("response shape matches Python ToolCallResponse", async () => {
     const app = makeApp();
     const res = await app.handle(
-      invokeRequest({ name: "echo", inputs: { message: "test" } }),
+      invokeRequest({
+        tool: { name: "echo", toolkit: "" },
+        inputs: { message: "test" },
+      }),
     );
     const body = await res.json();
 
-    expect(body).toHaveProperty("executionId");
+    // snake_case fields matching Python
+    expect(body).toHaveProperty("execution_id");
     expect(body).toHaveProperty("duration");
-    expect(body).toHaveProperty("finishedAt");
+    expect(body).toHaveProperty("finished_at");
     expect(body).toHaveProperty("success");
     expect(body).toHaveProperty("output");
-    expect(typeof body.executionId).toBe("string");
+    expect(typeof body.execution_id).toBe("string");
     expect(typeof body.duration).toBe("number");
-    expect(typeof body.finishedAt).toBe("string");
+    expect(typeof body.finished_at).toBe("string");
+
+    // Output structure matches Python ToolCallOutput
+    expect(body.output).toHaveProperty("value");
+    expect(body.output.error).toBeNull();
+    expect(body.output.requires_authorization).toBeNull();
   });
 });

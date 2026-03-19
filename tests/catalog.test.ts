@@ -45,7 +45,7 @@ describe("ToolCatalog", () => {
       { name: "MyToolkit" },
     );
 
-    expect(catalog.has("MyToolkit_echo")).toBe(true);
+    expect(catalog.has("MyToolkit.echo")).toBe(true);
     expect(catalog.has("echo")).toBe(true);
   });
 
@@ -73,10 +73,10 @@ describe("ToolCatalog", () => {
       { name: "Tools" },
     );
 
-    const tool = catalog.getTool("Tools_echo");
+    const tool = catalog.getTool("Tools.echo");
     expect(tool).toBeDefined();
     expect(tool!.name).toBe("echo");
-    expect(tool!.fullyQualifiedName).toBe("Tools_echo");
+    expect(tool!.fullyQualifiedName).toBe("Tools.echo");
   });
 
   it("gets tool by short name", () => {
@@ -92,7 +92,7 @@ describe("ToolCatalog", () => {
 
     const tool = catalog.getToolByName("echo");
     expect(tool).toBeDefined();
-    expect(tool!.fullyQualifiedName).toBe("Tools_echo");
+    expect(tool!.fullyQualifiedName).toBe("Tools.echo");
   });
 
   it("returns undefined for missing tool", () => {
@@ -186,10 +186,10 @@ describe("toToolDefinition", () => {
       { name: "MyToolkit" },
     );
 
-    const tool = catalog.getTool("MyToolkit_echo")!;
+    const tool = catalog.getTool("MyToolkit.echo")!;
     const def = toToolDefinition(tool);
 
-    expect(def.name).toBe("MyToolkit_echo");
+    expect(def.name).toBe("MyToolkit.echo");
     expect(def.description).toBe("Echo a message");
     expect(def.toolkit?.name).toBe("MyToolkit");
     expect(def.inputSchema).toHaveProperty("type", "object");
@@ -214,7 +214,7 @@ describe("toToolDefinition", () => {
       { name: "MyToolkit", version: "1.2.0", description: "My toolkit" },
     );
 
-    const tool = catalog.getTool("MyToolkit_echo")!;
+    const tool = catalog.getTool("MyToolkit.echo")!;
     const def = toToolDefinition(tool);
 
     expect(def.toolkit).toEqual({
@@ -236,7 +236,7 @@ describe("toToolDefinition", () => {
       { name: "Bare" },
     );
 
-    const def = toToolDefinition(catalog.getTool("Bare_echo")!);
+    const def = toToolDefinition(catalog.getTool("Bare.echo")!);
     expect(def.toolkit?.name).toBe("Bare");
     expect(def.toolkit?.version).toBeUndefined();
     expect(def.toolkit?.description).toBeUndefined();
@@ -256,7 +256,7 @@ describe("toolkit versioning", () => {
       { name: "MyKit", version: "2.1.0", description: "A toolkit" },
     );
 
-    const tool = catalog.getTool("MyKit_greet")!;
+    const tool = catalog.getTool("MyKit.greet")!;
     expect(tool.toolkitVersion).toBe("2.1.0");
     expect(tool.toolkitDescription).toBe("A toolkit");
   });
@@ -274,7 +274,7 @@ describe("toolkit versioning", () => {
       { name: "DefaultKit", version: "1.0.0", description: "Default" },
     );
 
-    const tool = catalog.getTool("OverrideKit_special")!;
+    const tool = catalog.getTool("OverrideKit.special")!;
     expect(tool.toolkitName).toBe("OverrideKit");
     expect(tool.toolkitVersion).toBe("3.0.0");
     // Falls back to app-level description since override didn't specify one
@@ -290,7 +290,7 @@ describe("toolkit versioning", () => {
       { name: "Kit", version: "v2" },
     );
 
-    expect(catalog.getTool("Kit_t")!.toolkitVersion).toBe("2.0.0");
+    expect(catalog.getTool("Kit.t")!.toolkitVersion).toBe("2.0.0");
   });
 });
 

@@ -8,8 +8,10 @@ import type { EventStore } from "./event-store.js";
 
 /**
  * Separator between toolkit name and tool name in fully-qualified names.
+ * Defaults to "." to match the Python SDK. Configurable via ARCADE_TOOL_NAME_SEPARATOR.
  */
-export const TOOL_NAME_SEPARATOR = "_";
+export const TOOL_NAME_SEPARATOR =
+  process.env.ARCADE_TOOL_NAME_SEPARATOR ?? ".";
 
 /**
  * Toolkit identity — name, optional version, and optional description.
@@ -121,35 +123,12 @@ export interface ToolDefinition {
 }
 
 /**
- * Result of tool execution from the worker.
+ * Result of tool execution from the worker (Python-compatible wire format).
  */
-export interface ToolCallResponse {
-  executionId: string;
-  duration: number;
-  finishedAt: string;
-  success: boolean;
-  output?: {
-    value?: unknown;
-    error?: string;
-  };
-}
-
-/**
- * Request body for worker tool invocation.
- */
-export interface ToolCallRequest {
-  name: string;
-  inputs?: Record<string, unknown>;
-  userId?: string;
-  context?: {
-    authorization?: {
-      token?: string;
-      userInfo?: Record<string, unknown>;
-    };
-    secrets?: Array<{ key: string; value: string }>;
-    metadata?: Array<{ key: string; value: string }>;
-  };
-}
+export type {
+  WorkerToolCallRequest as ToolCallRequest,
+  WorkerToolCallResponse as ToolCallResponse,
+} from "./worker/types.js";
 
 // ── Prompt types ─────────────────────────────────────────
 
