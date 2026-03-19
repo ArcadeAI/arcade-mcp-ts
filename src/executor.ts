@@ -76,6 +76,9 @@ export function handleToolError(error: unknown): ToolExecutionResult {
 
   const message = error instanceof Error ? error.message : String(error);
   const stack = error instanceof Error ? error.stack : undefined;
+  const hideStack =
+    process.env.MCP_HIDE_STACK_TRACES === "true" ||
+    process.env.MCP_HIDE_STACK_TRACES === "1";
 
   return {
     success: false,
@@ -83,7 +86,7 @@ export function handleToolError(error: unknown): ToolExecutionResult {
       message,
       kind: "tool_runtime_fatal",
       canRetry: false,
-      extra: stack ? { stacktrace: stack } : undefined,
+      extra: stack && !hideStack ? { stacktrace: stack } : undefined,
     },
   };
 }

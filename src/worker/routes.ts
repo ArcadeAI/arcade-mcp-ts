@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { SpanStatusCode } from "@opentelemetry/api";
 import { Elysia } from "elysia";
 import type { ToolCatalog } from "../catalog.js";
@@ -24,12 +25,13 @@ export interface WorkerRoutesOptions {
  */
 // biome-ignore lint/suspicious/noExplicitAny: Elysia generic prefix typing
 export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
-  const secret = options.secret ?? process.env.ARCADE_WORKER_SECRET;
-  if (!secret) {
+  const rawSecret = options.secret ?? process.env.ARCADE_WORKER_SECRET;
+  if (!rawSecret) {
     throw new ServerError(
       "No secret provided for worker routes. Set the ARCADE_WORKER_SECRET environment variable.",
     );
   }
+  const secret: string = rawSecret;
 
   const basePath = options.basePath ?? "/worker";
   const catalog = options.catalog;
@@ -38,11 +40,14 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 
   const app = new Elysia({ prefix: basePath });
 
-  // Auth middleware for worker routes
+  // Auth middleware for worker routes (timing-safe comparison)
   function validateWorkerAuth(request: Request): boolean {
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) return false;
-    return authHeader.slice(7) === secret;
+    const token = Buffer.from(authHeader.slice(7));
+    const expected = Buffer.from(secret);
+    if (token.length !== expected.length) return false;
+    return timingSafeEqual(token, expected);
   }
 
   // GET /worker/tools — list available tools
@@ -104,7 +109,8 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 
     const invokeInner = async () => {
       // Inject secrets declared by the tool from env, then overlay
-      // any secrets provided in the request context (caller wins)
+      // any secrets provided in the request context (caller wins,
+      // but only for secrets the tool has declared)
       const secrets: Record<string, string> = {};
       if (tool.secrets) {
         for (const name of tool.secrets) {
@@ -114,9 +120,12 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
           }
         }
       }
-      if (body.context?.secrets) {
+      if (body.context?.secrets && tool.secrets) {
+        const allowed = new Set(tool.secrets);
         for (const { key, value } of body.context.secrets) {
-          secrets[key] = value;
+          if (allowed.has(key)) {
+            secrets[key] = value;
+          }
         }
       }
 
