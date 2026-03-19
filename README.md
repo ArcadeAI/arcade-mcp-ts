@@ -343,6 +343,11 @@ app.tool("example", opts, async (args, context) => {
   // Progress
   await context.progress.report(50, 100, "Halfway done");
 
+  // Notifications (deduplicated, flushed at end of request)
+  await context.notifications.tools.listChanged();
+  await context.notifications.resources.listChanged();
+  await context.notifications.prompts.listChanged();
+
   // Metadata
   context.signal;      // AbortSignal
   context.sessionId;   // string | undefined
