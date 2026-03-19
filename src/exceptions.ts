@@ -6,21 +6,21 @@
  */
 
 export interface MCPErrorOptions {
-	cause?: Error;
+  cause?: Error;
 }
 
 /**
  * Base class for all MCP-level errors.
  */
 export abstract class MCPError extends Error {
-	constructor(message: string, options?: MCPErrorOptions) {
-		super(message, { cause: options?.cause });
-		this.name = this.constructor.name;
-	}
+  constructor(message: string, options?: MCPErrorOptions) {
+    super(message, { cause: options?.cause });
+    this.name = this.constructor.name;
+  }
 
-	get isMCPError(): boolean {
-		return true;
-	}
+  get isMCPError(): boolean {
+    return true;
+  }
 }
 
 // ── MCPRuntimeError branch ──────────────────────────────

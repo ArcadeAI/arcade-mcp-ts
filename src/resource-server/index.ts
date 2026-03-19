@@ -1,12 +1,12 @@
 export { JWTResourceServerValidator } from "./jwt-validator.js";
 export type {
-	AccessTokenValidationOptions,
-	AuthorizationServerEntry,
-	ResourceOwner,
+  AccessTokenValidationOptions,
+  AuthorizationServerEntry,
+  ResourceOwner,
 } from "./types.js";
 export {
-	AuthenticationError,
-	InvalidTokenError,
-	ResourceServerValidator,
-	TokenExpiredError,
+  AuthenticationError,
+  InvalidTokenError,
+  ResourceServerValidator,
+  TokenExpiredError,
 } from "./validator.js";

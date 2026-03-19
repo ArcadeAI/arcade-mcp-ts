@@ -10,19 +10,19 @@ const DEBOUNCE_MS = 300;
  * Check if a file path should trigger a reload.
  */
 export function shouldReload(filename: string): boolean {
-	// Check ignored directories
-	const parts = filename.split("/");
-	for (const part of parts) {
-		if (IGNORE_DIRS.has(part) || part.startsWith(".")) {
-			// Allow the root "." but not hidden dirs
-			if (part !== ".") return false;
-		}
-	}
+  // Check ignored directories
+  const parts = filename.split("/");
+  for (const part of parts) {
+    if (IGNORE_DIRS.has(part) || part.startsWith(".")) {
+      // Allow the root "." but not hidden dirs
+      if (part !== ".") return false;
+    }
+  }
 
-	// Check extension
-	const dotIndex = filename.lastIndexOf(".");
-	if (dotIndex === -1) return false;
-	return WATCH_EXTENSIONS.has(filename.slice(dotIndex));
+  // Check extension
+  const dotIndex = filename.lastIndexOf(".");
+  if (dotIndex === -1) return false;
+  return WATCH_EXTENSIONS.has(filename.slice(dotIndex));
 }
 
 /**
@@ -30,23 +30,23 @@ export function shouldReload(filename: string): boolean {
  * For ESM (used by this project), we append a cache-busting query param.
  */
 export function cacheBustingUrl(filePath: string): string {
-	const url = pathToFileURL(resolve(filePath));
-	url.searchParams.set("t", String(Date.now()));
-	return url.href;
+  const url = pathToFileURL(resolve(filePath));
+  url.searchParams.set("t", String(Date.now()));
+  return url.href;
 }
 
 export interface DevReloadOptions {
-	/** Directory to watch for file changes. */
-	dir: string;
-	/** Called when relevant files change. */
-	onChange: (changedFiles: string[]) => Promise<void>;
-	/** Logger for reload messages. */
-	logger: { info: (msg: string) => void };
+  /** Directory to watch for file changes. */
+  dir: string;
+  /** Called when relevant files change. */
+  onChange: (changedFiles: string[]) => Promise<void>;
+  /** Logger for reload messages. */
+  logger: { info: (msg: string) => void };
 }
 
 export interface DevReloadHandle {
-	/** Stop watching for file changes. */
-	close(): void;
+  /** Stop watching for file changes. */
+  close(): void;
 }
 
 /**
@@ -54,47 +54,47 @@ export interface DevReloadHandle {
  * Uses debouncing to batch rapid changes.
  */
 export function watchForChanges(options: DevReloadOptions): DevReloadHandle {
-	const { dir, onChange, logger } = options;
+  const { dir, onChange, logger } = options;
 
-	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-	let pendingFiles = new Set<string>();
-	let reloading = false;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingFiles = new Set<string>();
+  let reloading = false;
 
-	const watcher: FSWatcher = watch(
-		dir,
-		{ recursive: true },
-		(_event, filename) => {
-			if (!filename || !shouldReload(filename)) return;
+  const watcher: FSWatcher = watch(
+    dir,
+    { recursive: true },
+    (_event, filename) => {
+      if (!filename || !shouldReload(filename)) return;
 
-			pendingFiles.add(filename);
+      pendingFiles.add(filename);
 
-			if (debounceTimer) clearTimeout(debounceTimer);
+      if (debounceTimer) clearTimeout(debounceTimer);
 
-			debounceTimer = setTimeout(async () => {
-				if (reloading) return;
-				reloading = true;
+      debounceTimer = setTimeout(async () => {
+        if (reloading) return;
+        reloading = true;
 
-				const files = [...pendingFiles];
-				pendingFiles = new Set();
+        const files = [...pendingFiles];
+        pendingFiles = new Set();
 
-				logger.info(`File change detected: ${files.join(", ")}. Reloading...`);
+        logger.info(`File change detected: ${files.join(", ")}. Reloading...`);
 
-				try {
-					await onChange(files);
-				} catch (err) {
-					const msg = err instanceof Error ? err.message : String(err);
-					logger.info(`Reload failed: ${msg}`);
-				} finally {
-					reloading = false;
-				}
-			}, DEBOUNCE_MS);
-		},
-	);
+        try {
+          await onChange(files);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.info(`Reload failed: ${msg}`);
+        } finally {
+          reloading = false;
+        }
+      }, DEBOUNCE_MS);
+    },
+  );
 
-	return {
-		close() {
-			if (debounceTimer) clearTimeout(debounceTimer);
-			watcher.close();
-		},
-	};
+  return {
+    close() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      watcher.close();
+    },
+  };
 }

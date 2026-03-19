@@ -1,30 +1,41 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Elysia } from "elysia";
+import { registerAuthDiscoveryRoutes } from "../auth/routes.js";
+import type { ToolCatalog } from "../catalog.js";
 import type { EventStore } from "../event-store.js";
 import { createLogger } from "../logger.js";
 import type { ArcadeMCPServer } from "../server.js";
+import type { OTELHandler } from "../telemetry.js";
 import type {
-	ResourceOwner,
-	ResourceServerValidatorInterface,
+  ResourceOwner,
+  ResourceServerValidatorInterface,
 } from "../types.js";
+import { HTTPSessionManager } from "./http-session-manager.js";
 import { setupGracefulShutdown } from "./shutdown.js";
 
 const logger = createLogger("arcade-mcp-http");
 
 export interface HttpOptions {
-	host?: string;
-	port?: number;
-	auth?: ResourceServerValidatorInterface;
-	eventStore?: EventStore;
+  host?: string;
+  port?: number;
+  auth?: ResourceServerValidatorInterface;
+  eventStore?: EventStore;
+  stateless?: boolean;
+  sessionTtlMs?: number;
+  maxSessions?: number;
+  /** When set, worker routes are mounted at /worker/*. */
+  workerSecret?: string;
+  /** Tool catalog — required when workerSecret is set. */
+  catalog?: ToolCatalog;
+  /** Optional telemetry handler forwarded to worker routes. */
+  telemetry?: OTELHandler;
 }
 
 /**
  * Handle returned by startHttp — allows stopping the server.
  */
 export interface HttpHandle {
-	/** Stop the HTTP server and close all sessions. */
-	stop(): Promise<void>;
+  /** Stop the HTTP server and close all sessions. */
+  stop(): Promise<void>;
 }
 
 /**
@@ -32,132 +43,98 @@ export interface HttpHandle {
  * Returns a handle that can be used to stop the server.
  */
 export async function startHttp(
-	server: ArcadeMCPServer,
-	options?: HttpOptions,
+  server: ArcadeMCPServer,
+  options?: HttpOptions,
 ): Promise<HttpHandle> {
-	const host = options?.host ?? "127.0.0.1";
-	const port = options?.port ?? 8000;
+  const host = options?.host ?? "127.0.0.1";
+  const port = options?.port ?? 8000;
 
-	const app = new Elysia();
+  const app = new Elysia();
 
-	// Track transports and per-session McpServer instances
-	const sessions = new Map<
-		string,
-		{
-			transport: WebStandardStreamableHTTPServerTransport;
-			mcpServer: McpServer;
-		}
-	>();
+  const sessionManager = new HTTPSessionManager({
+    server,
+    stateless: options?.stateless,
+    eventStore: options?.eventStore,
+    sessionTtlMs: options?.sessionTtlMs,
+    maxSessions: options?.maxSessions,
+  });
 
-	// MCP endpoint
-	app.all("/mcp", async ({ request }) => {
-		// Auth validation for HTTP
-		let resourceOwner: ResourceOwner | undefined;
-		if (options?.auth) {
-			const authHeader = request.headers.get("authorization");
-			if (!authHeader?.startsWith("Bearer ")) {
-				return new Response(JSON.stringify({ error: "Missing Bearer token" }), {
-					status: 401,
-					headers: {
-						"Content-Type": "application/json",
-						"WWW-Authenticate": "Bearer",
-					},
-				});
-			}
-			try {
-				resourceOwner = await options.auth.validateToken(authHeader.slice(7));
-			} catch {
-				return new Response(JSON.stringify({ error: "Invalid token" }), {
-					status: 401,
-					headers: {
-						"Content-Type": "application/json",
-						"WWW-Authenticate": "Bearer",
-					},
-				});
-			}
-		}
+  // MCP endpoint
+  app.all("/mcp", async ({ request }) => {
+    // Auth validation for HTTP
+    let resourceOwner: ResourceOwner | undefined;
+    if (options?.auth) {
+      const authHeader = request.headers.get("authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: "Missing Bearer token" }), {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+            "WWW-Authenticate": "Bearer",
+          },
+        });
+      }
+      try {
+        resourceOwner = await options.auth.validateToken(authHeader.slice(7));
+      } catch {
+        return new Response(JSON.stringify({ error: "Invalid token" }), {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+            "WWW-Authenticate": "Bearer",
+          },
+        });
+      }
+    }
 
-		// Look up existing session transport
-		const sessionId = request.headers.get("mcp-session-id");
-		let transport: WebStandardStreamableHTTPServerTransport | undefined;
+    const authInfo = resourceOwner
+      ? {
+          token: "",
+          clientId: resourceOwner.clientId ?? "",
+          scopes: [],
+          extra: {
+            userId: resourceOwner.userId,
+            email: resourceOwner.email,
+            claims: resourceOwner.claims,
+          },
+        }
+      : undefined;
 
-		if (sessionId) {
-			transport = sessions.get(sessionId)?.transport;
-		}
+    return sessionManager.handleRequest(request, {
+      authInfo,
+    });
+  });
 
-		// Only create new transports for POST requests (initialization)
-		if (!transport && request.method === "POST") {
-			transport = new WebStandardStreamableHTTPServerTransport({
-				sessionIdGenerator: () => crypto.randomUUID(),
-				eventStore: options?.eventStore,
-				onsessioninitialized: (id: string) => {
-					sessions.set(id, { transport: transport!, mcpServer: sessionServer });
-				},
-			});
+  // OAuth discovery endpoint (RFC 9728)
+  if (options?.auth) {
+    registerAuthDiscoveryRoutes(app, options.auth);
+  }
 
-			transport.onclose = () => {
-				const sid = transport!.sessionId;
-				if (sid) {
-					const entry = sessions.get(sid);
-					sessions.delete(sid);
-					entry?.mcpServer.close().catch(() => {});
-				}
-			};
+  // Worker routes — conditionally mounted when a secret is provided
+  if (options?.workerSecret && options.catalog) {
+    const { createWorkerRoutes } = await import("../worker/routes.js");
+    const workerApp = createWorkerRoutes({
+      catalog: options.catalog,
+      secret: options.workerSecret,
+      telemetry: options.telemetry,
+    });
+    app.use(workerApp);
+    logger.info(
+      "Worker routes enabled at /worker/* (ARCADE_WORKER_SECRET is set)",
+    );
+  } else {
+    logger.debug("Worker routes disabled (ARCADE_WORKER_SECRET is not set)");
+  }
 
-			const sessionServer = server.createSessionServer();
-			await sessionServer.connect(transport);
-		}
+  app.listen({ hostname: host, port });
+  logger.info(`Arcade MCP HTTP server listening on ${host}:${port}`);
 
-		if (!transport) {
-			return new Response(JSON.stringify({ error: "Session not found" }), {
-				status: 404,
-				headers: { "Content-Type": "application/json" },
-			});
-		}
-
-		// Delegate to the web standard transport
-		return transport.handleRequest(request, {
-			authInfo: resourceOwner
-				? {
-						token: "",
-						clientId: resourceOwner.clientId ?? "",
-						scopes: [],
-						extra: {
-							userId: resourceOwner.userId,
-							email: resourceOwner.email,
-							claims: resourceOwner.claims,
-						},
-					}
-				: undefined,
-		});
-	});
-
-	// OAuth discovery endpoint (RFC 9728)
-	if (options?.auth?.supportsOAuthDiscovery?.()) {
-		app.get("/.well-known/oauth-protected-resource", () => {
-			const metadata = options?.auth?.getResourceMetadata?.();
-			if (metadata) {
-				return new Response(JSON.stringify(metadata), {
-					headers: { "Content-Type": "application/json" },
-				});
-			}
-			return new Response(null, { status: 404 });
-		});
-	}
-
-	app.listen({ hostname: host, port });
-	logger.info(`Arcade MCP HTTP server listening on ${host}:${port}`);
-
-	return {
-		async stop() {
-			const closePromises = [...sessions.values()].map(async (entry) => {
-				await entry.transport.close().catch(() => {});
-				await entry.mcpServer.close().catch(() => {});
-			});
-			await Promise.all(closePromises);
-			app.stop();
-		},
-	};
+  return {
+    async stop() {
+      await sessionManager.close();
+      app.stop();
+    },
+  };
 }
 
 /**
@@ -166,14 +143,14 @@ export async function startHttp(
  * Blocks until a shutdown signal is received.
  */
 export async function runHttp(
-	server: ArcadeMCPServer,
-	options?: HttpOptions,
+  server: ArcadeMCPServer,
+  options?: HttpOptions,
 ): Promise<void> {
-	const handle = await startHttp(server, options);
+  const handle = await startHttp(server, options);
 
-	// Block until shutdown signal
-	await setupGracefulShutdown({
-		logger,
-		onShutdown: () => handle.stop(),
-	});
+  // Block until shutdown signal
+  await setupGracefulShutdown({
+    logger,
+    onShutdown: () => handle.stop(),
+  });
 }

@@ -121,6 +121,7 @@ You can also enable dev mode via the `ARCADE_SERVER_RELOAD=1` environment variab
 - **Resources** — `app.resource(uri, options, handler)` with MIME types and runtime management
 - **Dev mode** — auto-reload on file changes with `--dev` flag (HTTP only)
 - **Resumable streams** — optional event store for HTTP stream resumability via `Last-Event-ID`
+- **Evals** — evaluate LLM tool-calling accuracy with critics, rubrics, and Hungarian-optimal matching
 - **Dual transport** — stdio and HTTP (Elysia + StreamableHTTP)
 - **Runtime compatible** — Bun and Node.js (no `Bun.*` APIs in library code)
 
@@ -182,6 +183,68 @@ app.tool(
 ```
 
 Any env var not prefixed with `MCP_` or `_` is available as a tool secret.
+
+### Tool with Behavior Hints
+
+Annotate tools with behavioral hints that map to MCP `ToolAnnotations`:
+
+```typescript
+app.tool(
+  "delete_file",
+  {
+    description: "Delete a file from the workspace",
+    parameters: z.object({ path: z.string() }),
+    behavior: {
+      readOnly: false,
+      destructive: true,
+      idempotent: true,
+      openWorld: false,
+    },
+  },
+  async (args) => {
+    // ...
+  },
+);
+```
+
+These hints are exposed as `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` in the MCP tool listing.
+
+### Deprecated Tools
+
+Mark tools as deprecated — the message is prepended to the description:
+
+```typescript
+app.tool(
+  "old_search",
+  {
+    description: "Search for items",
+    parameters: z.object({ query: z.string() }),
+    deprecationMessage: "Use search_v2 instead",
+  },
+  async (args) => {
+    // ...
+  },
+);
+// Description seen by clients: "[DEPRECATED: Use search_v2 instead] Search for items"
+```
+
+### Tool Title
+
+Provide a human-readable display name:
+
+```typescript
+app.tool(
+  "gh_star",
+  {
+    description: "Star a GitHub repository",
+    parameters: z.object({ repo: z.string() }),
+    title: "Star Repository",
+  },
+  async (args) => {
+    // ...
+  },
+);
+```
 
 ### Toolkit Versioning
 
@@ -342,6 +405,11 @@ app.tool("example", opts, async (args, context) => {
   // Progress
   await context.progress.report(50, 100, "Halfway done");
 
+  // Notifications (deduplicated, flushed at end of request)
+  await context.notifications.tools.listChanged();
+  await context.notifications.resources.listChanged();
+  await context.notifications.prompts.listChanged();
+
   // Metadata
   context.signal;      // AbortSignal
   context.sessionId;   // string | undefined
@@ -407,7 +475,7 @@ const app = new MCPApp({
 app.run({ transport: "http", port: 8000 });
 ```
 
-Supports RFC 9728 OAuth Protected Resource Metadata discovery.
+Supports RFC 9728 OAuth Protected Resource Metadata discovery. When `canonicalUrl` has a non-root path (e.g. `https://example.com/mcp`), both `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp` are registered for backward compatibility. Responses include CORS headers.
 
 ## Resumable Streams
 
@@ -441,6 +509,41 @@ class RedisEventStore implements EventStore {
     // Replay from Redis...
   }
 }
+```
+
+## Session Management
+
+The HTTP transport uses an `HTTPSessionManager` that supports stateful (default) and stateless modes, TTL-based session eviction, and max session caps:
+
+```typescript
+app.run({
+  transport: "http",
+  stateless: false,       // true = fresh transport per request, no session reuse
+  sessionTtlMs: 300_000,  // evict idle sessions after 5 minutes
+  maxSessions: 100,       // reject new sessions with 503 when at capacity
+});
+```
+
+In **stateful mode** (default), sessions are reused via the `mcp-session-id` header. Invalid session IDs receive a 400 response.
+
+In **stateless mode**, every request gets a fresh transport and server — no sessions are tracked.
+
+You can also use `HTTPSessionManager` directly for more control:
+
+```typescript
+import { HTTPSessionManager } from "@arcadeai/arcade-mcp";
+
+const manager = new HTTPSessionManager({
+  server: arcadeMcpServer,
+  sessionTtlMs: 60_000,
+  maxSessions: 50,
+});
+
+// In your HTTP handler:
+const response = await manager.handleRequest(request, { authInfo });
+
+// Graceful shutdown:
+await manager.close();
 ```
 
 ## Worker Routes
@@ -534,6 +637,113 @@ telemetry.initialize();
 // ... use telemetry.getTracer(), telemetry.getMeter()
 await telemetry.shutdown();
 ```
+
+## Evals
+
+Evaluate how well LLMs use your tools. Define expected tool calls and score the results with critics.
+
+```typescript
+import { EvalSuite, BinaryCritic, NumericCritic, SimilarityCritic } from "@arcadeai/arcade-mcp";
+```
+
+### Basic Eval
+
+```typescript
+const suite = new EvalSuite({
+  name: "My Tool Eval",
+  systemMessage: "You are a helpful assistant.",
+  rubric: { failThreshold: 0.85, warnThreshold: 0.95 },
+});
+
+// Register tools (MCP-style definitions)
+suite.addToolDefinitions([
+  {
+    name: "greet",
+    description: "Greet someone by name",
+    inputSchema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+]);
+
+// Add test cases
+suite.addCase({
+  name: "Greet Alice",
+  userMessage: "Say hello to Alice",
+  expectedToolCalls: [{ toolName: "greet", args: { name: "Alice" } }],
+  critics: [new BinaryCritic({ field: "name" })],
+});
+
+// Run against an LLM
+import Anthropic from "@anthropic-ai/sdk";
+
+const results = await suite.run({
+  client: new Anthropic(),
+  model: "claude-sonnet-4-20250514",
+  provider: "anthropic",
+});
+
+for (const c of results.cases) {
+  console.log(`${c.evaluation.passed ? "PASS" : "FAIL"} ${c.name} (${c.evaluation.score})`);
+}
+```
+
+OpenAI works too — pass an `OpenAI` client and the provider is auto-detected.
+
+### Using a ToolCatalog
+
+If you already have tools registered in an `MCPApp` or `ToolCatalog`, add them directly:
+
+```typescript
+suite.addFromCatalog(app.catalog);
+```
+
+### Critics
+
+Critics score individual arguments of a tool call:
+
+| Critic | Use case | Key options |
+|---|---|---|
+| `BinaryCritic` | Exact equality (with type coercion) | `field`, `weight?` |
+| `NumericCritic` | Fuzzy numeric range matching | `field`, `valueRange`, `matchThreshold?`, `weight?` |
+| `SimilarityCritic` | Word-frequency cosine similarity | `field`, `similarityThreshold?`, `weight?` |
+
+```typescript
+// Exact match
+new BinaryCritic({ field: "city" })
+
+// Numeric within range [1, 7], match if similarity >= 0.9
+new NumericCritic({ field: "days", valueRange: [1, 7], matchThreshold: 0.9 })
+
+// String similarity >= 0.75
+new SimilarityCritic({ field: "description", similarityThreshold: 0.75 })
+```
+
+### Rubric
+
+The `EvalRubric` controls pass/fail/warning thresholds:
+
+| Option | Default | Description |
+|---|---|---|
+| `failThreshold` | `0.8` | Minimum score to pass |
+| `warnThreshold` | `0.9` | Score below this triggers a warning |
+| `failOnToolSelection` | `true` | Immediately fail if wrong tool is called |
+| `failOnToolCallQuantity` | `true` | Immediately fail if wrong number of calls |
+| `toolSelectionWeight` | `1.0` | Weight for tool name matching |
+
+### Running Evals
+
+```bash
+# With Anthropic
+ANTHROPIC_API_KEY=sk-ant-... bun run examples/evals/echo-eval.ts
+
+# With OpenAI
+OPENAI_API_KEY=sk-... bun run examples/evals/echo-eval.ts
+```
+
+See `examples/evals/` for complete examples.
 
 ## Examples
 
