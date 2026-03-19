@@ -1,5 +1,3 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Elysia } from "elysia";
 import { registerAuthDiscoveryRoutes } from "../auth/routes.js";
 import type { EventStore } from "../event-store.js";
@@ -9,6 +7,7 @@ import type {
   ResourceOwner,
   ResourceServerValidatorInterface,
 } from "../types.js";
+import { HTTPSessionManager } from "./http-session-manager.js";
 import { setupGracefulShutdown } from "./shutdown.js";
 
 const logger = createLogger("arcade-mcp-http");
@@ -18,6 +17,9 @@ export interface HttpOptions {
   port?: number;
   auth?: ResourceServerValidatorInterface;
   eventStore?: EventStore;
+  stateless?: boolean;
+  sessionTtlMs?: number;
+  maxSessions?: number;
 }
 
 /**
@@ -41,14 +43,13 @@ export async function startHttp(
 
   const app = new Elysia();
 
-  // Track transports and per-session McpServer instances
-  const sessions = new Map<
-    string,
-    {
-      transport: WebStandardStreamableHTTPServerTransport;
-      mcpServer: McpServer;
-    }
-  >();
+  const sessionManager = new HTTPSessionManager({
+    server,
+    stateless: options?.stateless,
+    eventStore: options?.eventStore,
+    sessionTtlMs: options?.sessionTtlMs,
+    maxSessions: options?.maxSessions,
+  });
 
   // MCP endpoint
   app.all("/mcp", async ({ request }) => {
@@ -78,58 +79,21 @@ export async function startHttp(
       }
     }
 
-    // Look up existing session transport
-    const sessionId = request.headers.get("mcp-session-id");
-    let transport: WebStandardStreamableHTTPServerTransport | undefined;
-
-    if (sessionId) {
-      transport = sessions.get(sessionId)?.transport;
-    }
-
-    // Only create new transports for POST requests (initialization)
-    if (!transport && request.method === "POST") {
-      transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-        eventStore: options?.eventStore,
-        onsessioninitialized: (id: string) => {
-          sessions.set(id, { transport: transport!, mcpServer: sessionServer });
-        },
-      });
-
-      transport.onclose = () => {
-        const sid = transport!.sessionId;
-        if (sid) {
-          const entry = sessions.get(sid);
-          sessions.delete(sid);
-          entry?.mcpServer.close().catch(() => {});
+    const authInfo = resourceOwner
+      ? {
+          token: "",
+          clientId: resourceOwner.clientId ?? "",
+          scopes: [],
+          extra: {
+            userId: resourceOwner.userId,
+            email: resourceOwner.email,
+            claims: resourceOwner.claims,
+          },
         }
-      };
+      : undefined;
 
-      const sessionServer = server.createSessionServer();
-      await sessionServer.connect(transport);
-    }
-
-    if (!transport) {
-      return new Response(JSON.stringify({ error: "Session not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // Delegate to the web standard transport
-    return transport.handleRequest(request, {
-      authInfo: resourceOwner
-        ? {
-            token: "",
-            clientId: resourceOwner.clientId ?? "",
-            scopes: [],
-            extra: {
-              userId: resourceOwner.userId,
-              email: resourceOwner.email,
-              claims: resourceOwner.claims,
-            },
-          }
-        : undefined,
+    return sessionManager.handleRequest(request, {
+      authInfo,
     });
   });
 
@@ -143,11 +107,7 @@ export async function startHttp(
 
   return {
     async stop() {
-      const closePromises = [...sessions.values()].map(async (entry) => {
-        await entry.transport.close().catch(() => {});
-        await entry.mcpServer.close().catch(() => {});
-      });
-      await Promise.all(closePromises);
+      await sessionManager.close();
       app.stop();
     },
   };

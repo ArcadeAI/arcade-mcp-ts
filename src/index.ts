@@ -114,6 +114,10 @@ export {
   startHttp,
 } from "./transports/http.js";
 
+export {
+  HTTPSessionManager,
+  type HTTPSessionManagerOptions,
+} from "./transports/http-session-manager.js";
 // ── Transports ───────────────────────────────────────────
 export { setupGracefulShutdown } from "./transports/shutdown.js";
 export { runStdio } from "./transports/stdio.js";
