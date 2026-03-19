@@ -1,6 +1,6 @@
 import type {
-	GetPromptResult,
-	ReadResourceResult,
+  GetPromptResult,
+  ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { z } from "zod";
 import type { ToolAuthorization } from "./auth/types.js";
@@ -15,29 +15,29 @@ export const TOOL_NAME_SEPARATOR = "_";
  * Toolkit identity — name, optional version, and optional description.
  */
 export interface ToolkitInfo {
-	name: string;
-	version?: string;
-	description?: string;
+  name: string;
+  version?: string;
+  description?: string;
 }
 
 /**
  * Options passed to app.tool() for defining a tool.
  */
 export interface ToolOptions<T extends z.ZodType = z.ZodType> {
-	description: string;
-	parameters: T;
-	auth?: ToolAuthorization;
-	secrets?: string[];
-	metadata?: Record<string, unknown>;
-	toolkit?: Partial<ToolkitInfo>;
+  description: string;
+  parameters: T;
+  auth?: ToolAuthorization;
+  secrets?: string[];
+  metadata?: Record<string, unknown>;
+  toolkit?: Partial<ToolkitInfo>;
 }
 
 /**
  * A tool handler function receives validated args and a Context.
  */
 export type ToolHandler<T = unknown, R = unknown> = (
-	args: T,
-	context: ToolContext,
+  args: T,
+  context: ToolContext,
 ) => R | Promise<R>;
 
 /**
@@ -45,12 +45,12 @@ export type ToolHandler<T = unknown, R = unknown> = (
  * The full Context class implements this.
  */
 export interface ToolContext {
-	getSecret(name: string): string;
-	getAuthToken(): string;
-	getAuthTokenOrEmpty(): string;
-	readonly signal: AbortSignal;
-	readonly sessionId?: string;
-	readonly requestId: string;
+  getSecret(name: string): string;
+  getAuthToken(): string;
+  getAuthTokenOrEmpty(): string;
+  readonly signal: AbortSignal;
+  readonly sessionId?: string;
+  readonly requestId: string;
 }
 
 /**
@@ -58,67 +58,67 @@ export interface ToolContext {
  * schema, auth requirements, and metadata.
  */
 export interface MaterializedTool {
-	name: string;
-	fullyQualifiedName: string;
-	description: string;
-	handler: ToolHandler;
-	parameters: z.ZodType;
-	auth?: ToolAuthorization;
-	secrets?: string[];
-	metadata?: Record<string, unknown>;
-	toolkitName?: string;
-	toolkitVersion?: string;
-	toolkitDescription?: string;
-	dateAdded: Date;
-	dateUpdated: Date;
+  name: string;
+  fullyQualifiedName: string;
+  description: string;
+  handler: ToolHandler;
+  parameters: z.ZodType;
+  auth?: ToolAuthorization;
+  secrets?: string[];
+  metadata?: Record<string, unknown>;
+  toolkitName?: string;
+  toolkitVersion?: string;
+  toolkitDescription?: string;
+  dateAdded: Date;
+  dateUpdated: Date;
 }
 
 /**
  * Tool definition as exposed to MCP clients (wire format).
  */
 export interface ToolDefinition {
-	name: string;
-	description: string;
-	inputSchema: Record<string, unknown>;
-	auth?: ToolAuthorization;
-	secrets?: string[];
-	metadata?: Record<string, unknown>;
-	toolkit?: {
-		name: string;
-		version?: string;
-		description?: string;
-	};
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  auth?: ToolAuthorization;
+  secrets?: string[];
+  metadata?: Record<string, unknown>;
+  toolkit?: {
+    name: string;
+    version?: string;
+    description?: string;
+  };
 }
 
 /**
  * Result of tool execution from the worker.
  */
 export interface ToolCallResponse {
-	executionId: string;
-	duration: number;
-	finishedAt: string;
-	success: boolean;
-	output?: {
-		value?: unknown;
-		error?: string;
-	};
+  executionId: string;
+  duration: number;
+  finishedAt: string;
+  success: boolean;
+  output?: {
+    value?: unknown;
+    error?: string;
+  };
 }
 
 /**
  * Request body for worker tool invocation.
  */
 export interface ToolCallRequest {
-	name: string;
-	inputs?: Record<string, unknown>;
-	userId?: string;
-	context?: {
-		authorization?: {
-			token?: string;
-			userInfo?: Record<string, unknown>;
-		};
-		secrets?: Array<{ key: string; value: string }>;
-		metadata?: Array<{ key: string; value: string }>;
-	};
+  name: string;
+  inputs?: Record<string, unknown>;
+  userId?: string;
+  context?: {
+    authorization?: {
+      token?: string;
+      userInfo?: Record<string, unknown>;
+    };
+    secrets?: Array<{ key: string; value: string }>;
+    metadata?: Array<{ key: string; value: string }>;
+  };
 }
 
 // ── Prompt types ─────────────────────────────────────────
@@ -127,24 +127,24 @@ export interface ToolCallRequest {
  * A prompt argument definition.
  */
 export interface PromptArgument {
-	name: string;
-	description?: string;
-	required?: boolean;
+  name: string;
+  description?: string;
+  required?: boolean;
 }
 
 /**
  * Options passed to app.prompt() for defining a prompt.
  */
 export interface PromptOptions {
-	description?: string;
-	arguments?: PromptArgument[];
+  description?: string;
+  arguments?: PromptArgument[];
 }
 
 /**
  * A prompt handler function receives string arguments and returns prompt messages.
  */
 export type PromptHandler = (
-	args: Record<string, string>,
+  args: Record<string, string>,
 ) => GetPromptResult | Promise<GetPromptResult>;
 
 // ── Resource types ───────────────────────────────────────
@@ -153,82 +153,82 @@ export type PromptHandler = (
  * Options passed to app.resource() for defining a resource.
  */
 export interface ResourceOptions {
-	description?: string;
-	mimeType?: string;
+  description?: string;
+  mimeType?: string;
 }
 
 /**
  * A resource handler function receives a URI and returns resource contents.
  */
 export type ResourceHandler = (
-	uri: URL,
+  uri: URL,
 ) => ReadResourceResult | Promise<ReadResourceResult>;
 
 /**
  * Transport configuration for app.run().
  */
 export interface TransportOptions {
-	transport?: "stdio" | "http";
-	host?: string;
-	port?: number;
-	dev?: boolean;
-	eventStore?: EventStore;
+  transport?: "stdio" | "http";
+  host?: string;
+  port?: number;
+  dev?: boolean;
+  eventStore?: EventStore;
 }
 
 /**
  * Options for creating an MCPApp.
  */
 export interface MCPAppOptions {
-	name: string;
-	version?: string;
-	title?: string;
-	instructions?: string;
-	logLevel?: string;
-	middleware?: Middleware[];
-	auth?: ResourceServerValidatorInterface;
+  name: string;
+  version?: string;
+  title?: string;
+  instructions?: string;
+  logLevel?: string;
+  middleware?: Middleware[];
+  auth?: ResourceServerValidatorInterface;
 }
 
 /**
  * Minimal interface for resource server validators.
  */
 export interface ResourceServerValidatorInterface {
-	validateToken(token: string): Promise<ResourceOwner>;
-	supportsOAuthDiscovery?(): boolean;
-	getResourceMetadata?(): Record<string, unknown> | null;
+  validateToken(token: string): Promise<ResourceOwner>;
+  supportsOAuthDiscovery?(): boolean;
+  getResourceMetadata?(): Record<string, unknown> | null;
 }
 
 /**
  * Represents an authenticated resource owner (user).
  */
 export interface ResourceOwner {
-	userId: string;
-	clientId?: string;
-	email?: string;
-	claims: Record<string, unknown>;
+  userId: string;
+  clientId?: string;
+  email?: string;
+  claims: Record<string, unknown>;
 }
 
 /**
  * Middleware interface — imported here to avoid circular deps.
  */
 export interface Middleware {
-	onMessage?(context: MiddlewareContext, next: CallNext): Promise<unknown>;
-	onRequest?(context: MiddlewareContext, next: CallNext): Promise<unknown>;
-	onCallTool?(context: MiddlewareContext, next: CallNext): Promise<unknown>;
-	onListTools?(context: MiddlewareContext, next: CallNext): Promise<unknown>;
+  onMessage?(context: MiddlewareContext, next: CallNext): Promise<unknown>;
+  onRequest?(context: MiddlewareContext, next: CallNext): Promise<unknown>;
+  onCallTool?(context: MiddlewareContext, next: CallNext): Promise<unknown>;
+  onListTools?(context: MiddlewareContext, next: CallNext): Promise<unknown>;
 }
 
 /**
  * Context passed through middleware chain.
  */
 export interface MiddlewareContext {
-	method: string;
-	params: unknown;
-	source: "client" | "server";
-	type: "request" | "notification";
-	timestamp: Date;
-	requestId?: string;
-	sessionId?: string;
-	metadata: Record<string, unknown>;
+  method: string;
+  params: unknown;
+  source: "client" | "server";
+  type: "request" | "notification";
+  timestamp: Date;
+  requestId?: string;
+  sessionId?: string;
+  metadata: Record<string, unknown>;
 }
 
 /**

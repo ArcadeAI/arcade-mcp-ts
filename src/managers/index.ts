@@ -1,9 +1,9 @@
 export { ComponentRegistry, type RegistrySubscriber } from "./base.js";
 export {
-	PromptManager,
-	type StoredPrompt,
+  PromptManager,
+  type StoredPrompt,
 } from "./prompt-manager.js";
 export {
-	ResourceManager,
-	type StoredResource,
+  ResourceManager,
+  type StoredResource,
 } from "./resource-manager.js";
