@@ -112,7 +112,6 @@ export {
   runHttp,
   startHttp,
 } from "./transports/http.js";
-
 // ── Transports ───────────────────────────────────────────
 export { setupGracefulShutdown } from "./transports/shutdown.js";
 export { runStdio } from "./transports/stdio.js";
@@ -138,5 +137,12 @@ export type {
   ToolOptions,
   TransportOptions,
 } from "./types.js";
+// ── Usage Tracking ──────────────────────────────────────
+export {
+  isTrackingEnabled,
+  type ServerStartParams,
+  ServerTracker,
+  type ToolCallParams,
+} from "./usage/index.js";
 // ── Worker ───────────────────────────────────────────────
 export { createWorkerRoutes } from "./worker/routes.js";

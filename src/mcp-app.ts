@@ -22,6 +22,7 @@ import type {
   ToolOptions,
   TransportOptions,
 } from "./types.js";
+import { ServerTracker } from "./usage/index.js";
 
 const logger = pino({ name: "arcade-mcp-app" });
 
@@ -52,6 +53,7 @@ export class MCPApp {
   private _auth?: ResourceServerValidatorInterface;
   private _server?: ArcadeMCPServer;
   private _telemetry?: OTELHandler;
+  private _tracker?: ServerTracker;
   private _toolkitInfo: ToolkitInfo;
   private _onReload?: (changedFiles: string[]) => Promise<void>;
 
@@ -181,6 +183,23 @@ export class MCPApp {
       process.on("beforeExit", shutdownTelemetry);
     }
 
+    // Initialize usage tracking
+    this._tracker = new ServerTracker(this.version);
+    this._tracker.trackServerStart({
+      transport,
+      host,
+      port,
+      toolCount: this._catalog.size,
+      resourceServerType: this._auth ? "jwt" : undefined,
+    });
+
+    const shutdownTracker = async () => {
+      await this._tracker?.shutdown();
+    };
+    process.on("SIGINT", shutdownTracker);
+    process.on("SIGTERM", shutdownTracker);
+    process.on("beforeExit", shutdownTracker);
+
     if (dev && transport === "stdio") {
       logger.warn(
         "Dev mode (auto-reload) is not supported with stdio transport. Starting without reload.",
@@ -231,6 +250,7 @@ export class MCPApp {
       middleware: this._middleware as never[],
       auth: this._auth,
       telemetry: this._telemetry,
+      tracker: this._tracker,
       promptManager: this._promptManager,
       resourceManager: this._resourceManager,
     });
