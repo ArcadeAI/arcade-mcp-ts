@@ -21,6 +21,16 @@ export interface ToolkitInfo {
 }
 
 /**
+ * Behavioral hints for a tool — mapped to MCP ToolAnnotations.
+ */
+export interface ToolBehavior {
+  readOnly?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+  openWorld?: boolean;
+}
+
+/**
  * Options passed to app.tool() for defining a tool.
  */
 export interface ToolOptions<T extends z.ZodType = z.ZodType> {
@@ -30,6 +40,12 @@ export interface ToolOptions<T extends z.ZodType = z.ZodType> {
   secrets?: string[];
   metadata?: Record<string, unknown>;
   toolkit?: Partial<ToolkitInfo>;
+  /** Human-readable display name for the tool. */
+  title?: string;
+  /** Message shown when the tool is deprecated. */
+  deprecationMessage?: string;
+  /** Behavioral hints mapped to MCP ToolAnnotations. */
+  behavior?: ToolBehavior;
 }
 
 /**
@@ -69,6 +85,12 @@ export interface MaterializedTool {
   toolkitName?: string;
   toolkitVersion?: string;
   toolkitDescription?: string;
+  /** Human-readable display name for the tool. */
+  title?: string;
+  /** Message shown when the tool is deprecated. */
+  deprecationMessage?: string;
+  /** Behavioral hints mapped to MCP ToolAnnotations. */
+  behavior?: ToolBehavior;
   dateAdded: Date;
   dateUpdated: Date;
 }
@@ -88,6 +110,14 @@ export interface ToolDefinition {
     version?: string;
     description?: string;
   };
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  _meta?: Record<string, unknown>;
 }
 
 /**

@@ -324,3 +324,93 @@ describe("normalizeVersion", () => {
     expect(() => normalizeVersion("1.2.3.4")).toThrow(ToolDefinitionError);
   });
 });
+
+describe("toToolDefinition with convert metadata", () => {
+  let catalog: ToolCatalog;
+
+  beforeEach(() => {
+    catalog = new ToolCatalog();
+  });
+
+  it("includes annotations from behavior", () => {
+    catalog.addTool(
+      "read_data",
+      {
+        description: "Read data",
+        parameters: z.object({}),
+        behavior: { readOnly: true, destructive: false },
+      },
+      async () => ({}),
+    );
+
+    const defs = catalog.toDefinitions();
+    expect(defs[0].annotations).toEqual({
+      title: "read_data",
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+  });
+
+  it("includes _meta.arcade from auth and secrets", () => {
+    catalog.addTool(
+      "star_repo",
+      {
+        description: "Star a repo",
+        parameters: z.object({ repo: z.string() }),
+        auth: {
+          providerId: "github",
+          providerType: "oauth2",
+          scopes: ["repo"],
+        },
+        secrets: ["GH_TOKEN"],
+      },
+      async () => ({}),
+    );
+
+    const defs = catalog.toDefinitions();
+    expect(defs[0]._meta).toEqual({
+      arcade: {
+        requirements: {
+          authorization: {
+            providerId: "github",
+            providerType: "oauth2",
+            scopes: ["repo"],
+          },
+          secrets: ["GH_TOKEN"],
+        },
+      },
+    });
+  });
+
+  it("prepends deprecation message in description", () => {
+    catalog.addTool(
+      "old_tool",
+      {
+        description: "Does old things",
+        parameters: z.object({}),
+        deprecationMessage: "Use new_tool",
+      },
+      async () => ({}),
+    );
+
+    const defs = catalog.toDefinitions();
+    expect(defs[0].description).toBe(
+      "[DEPRECATED: Use new_tool] Does old things",
+    );
+  });
+
+  it("uses custom title in annotations", () => {
+    catalog.addTool(
+      "my_tool",
+      {
+        description: "A tool",
+        parameters: z.object({}),
+        title: "My Fancy Tool",
+      },
+      async () => ({}),
+    );
+
+    const defs = catalog.toDefinitions();
+    expect(defs[0].annotations?.title).toBe("My Fancy Tool");
+  });
+});

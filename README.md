@@ -184,6 +184,68 @@ app.tool(
 
 Any env var not prefixed with `MCP_` or `_` is available as a tool secret.
 
+### Tool with Behavior Hints
+
+Annotate tools with behavioral hints that map to MCP `ToolAnnotations`:
+
+```typescript
+app.tool(
+  "delete_file",
+  {
+    description: "Delete a file from the workspace",
+    parameters: z.object({ path: z.string() }),
+    behavior: {
+      readOnly: false,
+      destructive: true,
+      idempotent: true,
+      openWorld: false,
+    },
+  },
+  async (args) => {
+    // ...
+  },
+);
+```
+
+These hints are exposed as `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` in the MCP tool listing.
+
+### Deprecated Tools
+
+Mark tools as deprecated — the message is prepended to the description:
+
+```typescript
+app.tool(
+  "old_search",
+  {
+    description: "Search for items",
+    parameters: z.object({ query: z.string() }),
+    deprecationMessage: "Use search_v2 instead",
+  },
+  async (args) => {
+    // ...
+  },
+);
+// Description seen by clients: "[DEPRECATED: Use search_v2 instead] Search for items"
+```
+
+### Tool Title
+
+Provide a human-readable display name:
+
+```typescript
+app.tool(
+  "gh_star",
+  {
+    description: "Star a GitHub repository",
+    parameters: z.object({ repo: z.string() }),
+    title: "Star Repository",
+  },
+  async (args) => {
+    // ...
+  },
+);
+```
+
 ### Toolkit Versioning
 
 The app's `name`, `version`, and `title` are automatically attached to every tool as toolkit metadata. You can also override toolkit info per-tool:
