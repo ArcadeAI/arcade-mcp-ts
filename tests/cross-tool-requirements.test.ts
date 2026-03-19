@@ -99,7 +99,7 @@ describe("resolveCrossToolRequirements", () => {
     await server.resolveCrossToolRequirements();
 
     expect(mockToolsGet).toHaveBeenCalledWith("Gmail.ListEmails");
-    const tool = catalog.getTool("TestKit_compound")!;
+    const tool = catalog.getTool("TestKit.compound")!;
     expect(tool.secrets).toContain("EXISTING_SECRET");
     expect(tool.secrets).toContain("GMAIL_API_KEY");
     expect(tool.secrets).toContain("GMAIL_CLIENT_ID");
@@ -121,7 +121,7 @@ describe("resolveCrossToolRequirements", () => {
     const server = makeServer(catalog);
     await server.resolveCrossToolRequirements();
 
-    const tool = catalog.getTool("TestKit_compound")!;
+    const tool = catalog.getTool("TestKit.compound")!;
     expect(tool.secrets!.filter((s) => s === "GMAIL_API_KEY")).toHaveLength(1);
   });
 
@@ -146,7 +146,7 @@ describe("resolveCrossToolRequirements", () => {
     const server = makeServer(catalog);
     await server.resolveCrossToolRequirements();
 
-    const tool = catalog.getTool("TestKit_compound")!;
+    const tool = catalog.getTool("TestKit.compound")!;
     expect(tool.auth).toBeDefined();
     expect(tool.auth!.providerId).toBe("google");
     expect(tool.auth!.scopes).toContain("gmail.readonly");
@@ -179,7 +179,7 @@ describe("resolveCrossToolRequirements", () => {
     const server = makeServer(catalog);
     await server.resolveCrossToolRequirements();
 
-    const tool = catalog.getTool("TestKit_compound")!;
+    const tool = catalog.getTool("TestKit.compound")!;
     expect(tool.resolvedAuthorizations).toBeDefined();
     expect(tool.resolvedAuthorizations).toHaveLength(2);
     expect(tool.resolvedAuthorizations![0].providerId).toBe("google");
@@ -213,7 +213,7 @@ describe("resolveCrossToolRequirements", () => {
     const server = makeServer(catalog);
     await server.resolveCrossToolRequirements();
 
-    const tool = catalog.getTool("TestKit_compound")!;
+    const tool = catalog.getTool("TestKit.compound")!;
     // Same provider — should merge, not create multi-provider
     expect(tool.resolvedAuthorizations).toBeUndefined();
     expect(tool.auth!.providerId).toBe("google");
@@ -237,7 +237,7 @@ describe("resolveCrossToolRequirements", () => {
     await server.resolveCrossToolRequirements();
 
     // Secrets should not have been merged
-    const tool = catalog.getTool("TestKit_compound")!;
+    const tool = catalog.getTool("TestKit.compound")!;
     expect(tool.secrets).toBeUndefined();
   });
 
@@ -253,7 +253,7 @@ describe("resolveCrossToolRequirements", () => {
     // Should not throw
     await server.resolveCrossToolRequirements();
 
-    const tool = catalog.getTool("TestKit_compound")!;
+    const tool = catalog.getTool("TestKit.compound")!;
     expect(tool.secrets).toBeUndefined();
   });
 });
