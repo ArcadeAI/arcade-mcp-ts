@@ -13,6 +13,8 @@
  * Usage:
  *   npx @arcadeai/arcade-mcp stdio
  *   npx @arcadeai/arcade-mcp http
+ *   bunx @arcadeai/arcade-mcp stdio
+ *   bunx @arcadeai/arcade-mcp http
  */
 
 import { z } from "zod";
