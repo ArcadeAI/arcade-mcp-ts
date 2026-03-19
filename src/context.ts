@@ -415,8 +415,11 @@ export class Tools extends ContextComponent {
         };
       }
 
-      const errorMsg = response.output?.error
-        ? String(response.output.error)
+      const rawError = response.output?.error;
+      const errorMsg = rawError
+        ? typeof rawError === "string"
+          ? rawError
+          : JSON.stringify(rawError)
         : "Remote tool execution failed";
       return {
         content: [{ type: "text" as const, text: errorMsg }],
@@ -1095,15 +1098,30 @@ export class Notifications extends ContextComponent {
 // ── Helpers ──────────────────────────────────────────────
 
 function raiseToolError(toolName: string, rawResult: CallToolResult): never {
+  // Try to extract a human-readable error message from various sources
   let errorMsg = "Unknown error";
+
+  // 1. Try text content first (most reliable)
+  const textMsg = extractText(rawResult);
+  if (textMsg) {
+    errorMsg = textMsg;
+  }
+
+  // 2. Try structured content fields
   const structured = rawResult.structuredContent as
     | Record<string, unknown>
     | undefined;
   if (structured) {
-    errorMsg = String(
-      structured.llm_instructions ?? structured.error ?? errorMsg,
-    );
+    const candidate =
+      structured.llm_instructions ?? structured.error ?? structured.message;
+    if (candidate !== undefined) {
+      errorMsg =
+        typeof candidate === "string"
+          ? candidate
+          : JSON.stringify(candidate);
+    }
   }
+
   throw new ToolResponseExtractionError(
     `Tool '${toolName}' returned an error: ${errorMsg}`,
   );
