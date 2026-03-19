@@ -1,8 +1,19 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import * as jose from "jose";
 import { describe, expect, it } from "vitest";
 
 const WORKER_SECRET = "integration-test-secret";
+const SECRET_KEY = new TextEncoder().encode(WORKER_SECRET);
+
+async function createWorkerJWT(): Promise<string> {
+  return new jose.SignJWT({ ver: "1" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setAudience("worker")
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(SECRET_KEY);
+}
 
 async function waitForServer(url: string, timeoutMs = 10000): Promise<void> {
   const start = Date.now();
@@ -54,9 +65,16 @@ describe("HTTP worker route integration", () => {
       const noAuthRes = await fetch(`${baseUrl}/worker/tools`);
       expect(noAuthRes.status).toBe(401);
 
-      // Tools endpoint with correct auth should work
-      const toolsRes = await fetch(`${baseUrl}/worker/tools`, {
+      // Tools endpoint with raw secret (not JWT) should be rejected
+      const rawSecretRes = await fetch(`${baseUrl}/worker/tools`, {
         headers: { Authorization: `Bearer ${WORKER_SECRET}` },
+      });
+      expect(rawSecretRes.status).toBe(401);
+
+      // Tools endpoint with valid JWT should work
+      const jwt = await createWorkerJWT();
+      const toolsRes = await fetch(`${baseUrl}/worker/tools`, {
+        headers: { Authorization: `Bearer ${jwt}` },
       });
       expect(toolsRes.status).toBe(200);
       const tools = await toolsRes.json();
