@@ -121,6 +121,7 @@ You can also enable dev mode via the `ARCADE_SERVER_RELOAD=1` environment variab
 - **Resources** — `app.resource(uri, options, handler)` with MIME types and runtime management
 - **Dev mode** — auto-reload on file changes with `--dev` flag (HTTP only)
 - **Resumable streams** — optional event store for HTTP stream resumability via `Last-Event-ID`
+- **Evals** — evaluate LLM tool-calling accuracy with critics, rubrics, and Hungarian-optimal matching
 - **Dual transport** — stdio and HTTP (Elysia + StreamableHTTP)
 - **Runtime compatible** — Bun and Node.js (no `Bun.*` APIs in library code)
 
@@ -534,6 +535,113 @@ telemetry.initialize();
 // ... use telemetry.getTracer(), telemetry.getMeter()
 await telemetry.shutdown();
 ```
+
+## Evals
+
+Evaluate how well LLMs use your tools. Define expected tool calls and score the results with critics.
+
+```typescript
+import { EvalSuite, BinaryCritic, NumericCritic, SimilarityCritic } from "@arcadeai/arcade-mcp";
+```
+
+### Basic Eval
+
+```typescript
+const suite = new EvalSuite({
+  name: "My Tool Eval",
+  systemMessage: "You are a helpful assistant.",
+  rubric: { failThreshold: 0.85, warnThreshold: 0.95 },
+});
+
+// Register tools (MCP-style definitions)
+suite.addToolDefinitions([
+  {
+    name: "greet",
+    description: "Greet someone by name",
+    inputSchema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+]);
+
+// Add test cases
+suite.addCase({
+  name: "Greet Alice",
+  userMessage: "Say hello to Alice",
+  expectedToolCalls: [{ toolName: "greet", args: { name: "Alice" } }],
+  critics: [new BinaryCritic({ field: "name" })],
+});
+
+// Run against an LLM
+import Anthropic from "@anthropic-ai/sdk";
+
+const results = await suite.run({
+  client: new Anthropic(),
+  model: "claude-sonnet-4-20250514",
+  provider: "anthropic",
+});
+
+for (const c of results.cases) {
+  console.log(`${c.evaluation.passed ? "PASS" : "FAIL"} ${c.name} (${c.evaluation.score})`);
+}
+```
+
+OpenAI works too — pass an `OpenAI` client and the provider is auto-detected.
+
+### Using a ToolCatalog
+
+If you already have tools registered in an `MCPApp` or `ToolCatalog`, add them directly:
+
+```typescript
+suite.addFromCatalog(app.catalog);
+```
+
+### Critics
+
+Critics score individual arguments of a tool call:
+
+| Critic | Use case | Key options |
+|---|---|---|
+| `BinaryCritic` | Exact equality (with type coercion) | `field`, `weight?` |
+| `NumericCritic` | Fuzzy numeric range matching | `field`, `valueRange`, `matchThreshold?`, `weight?` |
+| `SimilarityCritic` | Word-frequency cosine similarity | `field`, `similarityThreshold?`, `weight?` |
+
+```typescript
+// Exact match
+new BinaryCritic({ field: "city" })
+
+// Numeric within range [1, 7], match if similarity >= 0.9
+new NumericCritic({ field: "days", valueRange: [1, 7], matchThreshold: 0.9 })
+
+// String similarity >= 0.75
+new SimilarityCritic({ field: "description", similarityThreshold: 0.75 })
+```
+
+### Rubric
+
+The `EvalRubric` controls pass/fail/warning thresholds:
+
+| Option | Default | Description |
+|---|---|---|
+| `failThreshold` | `0.8` | Minimum score to pass |
+| `warnThreshold` | `0.9` | Score below this triggers a warning |
+| `failOnToolSelection` | `true` | Immediately fail if wrong tool is called |
+| `failOnToolCallQuantity` | `true` | Immediately fail if wrong number of calls |
+| `toolSelectionWeight` | `1.0` | Weight for tool name matching |
+
+### Running Evals
+
+```bash
+# With Anthropic
+ANTHROPIC_API_KEY=sk-ant-... bun run examples/evals/echo-eval.ts
+
+# With OpenAI
+OPENAI_API_KEY=sk-... bun run examples/evals/echo-eval.ts
+```
+
+See `examples/evals/` for complete examples.
 
 ## Examples
 

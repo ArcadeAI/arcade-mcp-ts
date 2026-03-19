@@ -1,6 +1,6 @@
 {
   "name": "@arcadeai/arcade-mcp",
-  "version": "0.10.3",
+  "version": "0.11.0",
   "description": "TypeScript MCP framework with secret injection, OAuth auth providers, multi-user support, worker routes, and middleware",
   "type": "module",
   "bin": {
@@ -41,9 +41,11 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@biomejs/biome": "^2.4.8",
     "@types/node": "^25.5.0",
     "dotenv": "^17.3.1",
+    "openai": "^4.96.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.0"
   },
@@ -51,6 +53,18 @@
     "dist",
     "src"
   ],
+  "peerDependencies": {
+    "openai": ">=4.0.0",
+    "@anthropic-ai/sdk": ">=0.30.0"
+  },
+  "peerDependenciesMeta": {
+    "openai": {
+      "optional": true
+    },
+    "@anthropic-ai/sdk": {
+      "optional": true
+    }
+  },
   "license": "MIT",
   "repository": {
     "type": "git",

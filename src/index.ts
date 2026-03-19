@@ -34,6 +34,8 @@ export {
   UpstreamError,
   UpstreamRateLimitError,
 } from "./errors.js";
+// ── Evals ────────────────────────────────────────────────
+export * from "./evals/index.js";
 // ── Event Store ──────────────────────────────────────────
 export {
   type EventId,
