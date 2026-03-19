@@ -23,6 +23,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@arcadeai/arcadejs": "^2.3.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@opentelemetry/api": "^1.9.0",
@@ -42,7 +43,6 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
     "@biomejs/biome": "^2.4.8",
     "@types/node": "^25.5.0",
     "dotenv": "^17.3.1",

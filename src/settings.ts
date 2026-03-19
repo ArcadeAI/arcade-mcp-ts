@@ -66,6 +66,15 @@ export interface ArcadeSettings {
   userId?: string;
 }
 
+export interface AnthropicSettings {
+  /** Anthropic API key. If not set, Tier 3b extraction is disabled. */
+  apiKey?: string;
+  /** Anthropic model to use for structured extraction. */
+  model: string;
+  /** Override Anthropic API base URL (for testing/proxies). */
+  baseUrl?: string;
+}
+
 export interface MCPSettings {
   debug: boolean;
   notification: NotificationSettings;
@@ -75,6 +84,7 @@ export interface MCPSettings {
   middleware: MiddlewareSettings;
   telemetry: TelemetrySettings;
   arcade: ArcadeSettings;
+  anthropic: AnthropicSettings;
   toolSecrets: Record<string, string>;
 }
 
@@ -224,6 +234,11 @@ export function loadSettings(): MCPSettings {
         userId: envStr("ARCADE_USER_ID") ?? creds.userId,
       };
     })(),
+    anthropic: {
+      apiKey: envStr("ANTHROPIC_API_KEY"),
+      model: envStr("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")!,
+      baseUrl: envStr("ANTHROPIC_BASE_URL"),
+    },
     toolSecrets: collectToolSecrets(),
   };
 }

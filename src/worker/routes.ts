@@ -2,7 +2,7 @@ import { SpanStatusCode } from "@opentelemetry/api";
 import { Elysia } from "elysia";
 import * as jose from "jose";
 import type { ToolCatalog } from "../catalog.js";
-import { Context } from "../context.js";
+import { Context, type ToolExecutor } from "../context.js";
 import { ServerError } from "../exceptions.js";
 import { runTool } from "../executor.js";
 import { createLogger } from "../logger.js";
@@ -23,6 +23,8 @@ export interface WorkerRoutesOptions {
   secret?: string;
   basePath?: string;
   telemetry?: OTELHandler;
+  /** Tool executor for cross-tool calls via context.tools.execute(). */
+  toolExecutor?: ToolExecutor;
 }
 
 /**
@@ -43,6 +45,7 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
   const basePath = options.basePath ?? "/worker";
   const catalog = options.catalog;
   const telemetry = options.telemetry;
+  const toolExecutor = options.toolExecutor;
   const environment = process.env.ARCADE_ENVIRONMENT ?? "dev";
 
   const app = new Elysia({ prefix: basePath });
@@ -163,6 +166,7 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
           metadata: {},
           userId: body.context?.user_id ?? undefined,
         },
+        toolExecutor,
       });
 
       const result = await runTool(tool, body.inputs ?? {}, context);

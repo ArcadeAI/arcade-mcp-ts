@@ -117,6 +117,7 @@ export async function startHttp(
       catalog: options.catalog,
       secret: options.workerSecret,
       telemetry: options.telemetry,
+      toolExecutor: server,
     });
     app.use(workerApp);
     logger.info(

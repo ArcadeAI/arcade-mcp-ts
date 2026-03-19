@@ -10,6 +10,7 @@ import {
   type ServerExtra,
   setCurrentContext,
   type ToolContextData,
+  type ToolExecutor,
 } from "./context.js";
 import { createMcpToolConfig } from "./convert.js";
 import { runTool } from "./executor.js";
@@ -56,10 +57,10 @@ export interface ArcadeMCPServerOptions {
  * ArcadeMCPServer wraps the SDK's McpServer, intercepting tool registration
  * to add context injection, secret management, and middleware.
  */
-export class ArcadeMCPServer {
+export class ArcadeMCPServer implements ToolExecutor {
   readonly mcpServer: McpServer;
   private catalog: ToolCatalog;
-  private settings?: MCPSettings;
+  private _settings?: MCPSettings;
   private middlewareChain: MiddlewareInterface[];
   private auth?: ResourceServerValidatorInterface;
   private telemetry?: OTELHandler;
@@ -76,7 +77,7 @@ export class ArcadeMCPServer {
     this.catalog = catalog;
     this.name = options.name;
     this.version = options.version;
-    this.settings = options.settings;
+    this._settings = options.settings;
     this.auth = options.auth;
     this.telemetry = options.telemetry;
     this.tracker = options.tracker;
@@ -118,6 +119,37 @@ export class ArcadeMCPServer {
     );
   }
 
+  // ── ToolExecutor interface ───────────────────────────────
+
+  async executeToolByName(
+    name: string,
+    args: Record<string, unknown>,
+    extra: ServerExtra,
+  ): Promise<CallToolResult> {
+    const tool = this.catalog.getTool(name);
+    if (!tool) {
+      return {
+        content: [{ type: "text" as const, text: `Tool '${name}' not found` }],
+        isError: true,
+      };
+    }
+    return this.executeTool(tool, args, extra);
+  }
+
+  getArcadeClient(): Arcade | undefined {
+    return this._getArcadeClient();
+  }
+
+  getSettings(): MCPSettings | undefined {
+    return this._settings;
+  }
+
+  hasToolInCatalog(name: string): boolean {
+    return this.catalog.has(name);
+  }
+
+  // ── Tool registration ────────────────────────────────────
+
   /**
    * Register all tools from the catalog with the underlying McpServer.
    */
@@ -156,7 +188,7 @@ export class ArcadeMCPServer {
     args: Record<string, unknown>,
     extra: ServerExtra,
   ): Promise<CallToolResult> {
-    const environment = this.settings?.arcade.environment ?? "dev";
+    const environment = this._settings?.arcade.environment ?? "dev";
     const spanAttributes = {
       tool_name: tool.fullyQualifiedName,
       toolkit_name: tool.name,
@@ -174,9 +206,17 @@ export class ArcadeMCPServer {
       // Build tool context with secrets
       const toolCtxData = this.buildToolContext(tool);
 
-      // Resolve auth token from Arcade Cloud for tools with auth requirements.
-      // Skipped when a token is already present (e.g. injected by worker routes).
-      if (tool.auth && !toolCtxData.authToken) {
+      // Determine which auth requirements to check.
+      // Multi-provider tools (compound tools with resolvedAuthorizations from
+      // requestScopesFrom) don't need auth resolution here — their sub-tools
+      // handle their own auth via Arcade Cloud during context.tools.execute().
+      const isMultiProvider = (tool.resolvedAuthorizations?.length ?? 0) > 1;
+
+      if (isMultiProvider) {
+        _logger.debug(
+          `Tool "${tool.fullyQualifiedName}" is multi-provider (${tool.resolvedAuthorizations!.length} providers), skipping auth resolution — sub-tools handle their own auth`,
+        );
+      } else if (tool.auth && !toolCtxData.authToken) {
         _logger.debug(
           `Tool "${tool.fullyQualifiedName}" requires auth (provider=${tool.auth.providerId}), resolving token...`,
         );
@@ -186,7 +226,7 @@ export class ArcadeMCPServer {
         );
         if (authResult.error) {
           _logger.debug(
-            `Auth resolution for "${tool.fullyQualifiedName}" returned error to client`,
+            `Auth resolution for "${tool.fullyQualifiedName}" (provider=${tool.auth.providerId}) returned error to client`,
           );
           return authResult.error;
         }
@@ -205,13 +245,14 @@ export class ArcadeMCPServer {
         ? this._sessionRegistry.get(extra.sessionId)
         : undefined;
 
-      // Build Context
+      // Build Context with ToolExecutor reference
       const context = new Context(extra, {
         requestId: String(extra.requestId ?? crypto.randomUUID()),
         sessionId: extra.sessionId,
         resourceOwner: this.extractResourceOwner(extra),
         toolContext: toolCtxData,
         serverSession,
+        toolExecutor: this,
       });
 
       // Set as current context
@@ -307,7 +348,7 @@ export class ArcadeMCPServer {
     const secrets: Record<string, string> = {};
 
     if (tool.secrets) {
-      const envSecrets = this.settings?.toolSecrets ?? {};
+      const envSecrets = this._settings?.toolSecrets ?? {};
       for (const secretName of tool.secrets) {
         const value = envSecrets[secretName] ?? process.env[secretName];
         if (value !== undefined) {
@@ -327,9 +368,9 @@ export class ArcadeMCPServer {
    * Select user ID with priority: resource owner > settings > env > session.
    */
   private selectUserId(): string | undefined {
-    const userId = this.settings?.arcade.userId ?? process.env.ARCADE_USER_ID;
+    const userId = this._settings?.arcade.userId ?? process.env.ARCADE_USER_ID;
     if (userId) {
-      const source = this.settings?.arcade.userId
+      const source = this._settings?.arcade.userId
         ? process.env.ARCADE_USER_ID
           ? "ARCADE_USER_ID env var"
           : "~/.arcade/credentials.yaml"
@@ -364,9 +405,9 @@ export class ArcadeMCPServer {
   /**
    * Get or create the Arcade Cloud client. Returns undefined if no API key is configured.
    */
-  private getArcadeClient(): Arcade | undefined {
+  private _getArcadeClient(): Arcade | undefined {
     if (this.arcadeClient) return this.arcadeClient;
-    const apiKey = this.settings?.arcade.apiKey;
+    const apiKey = this._settings?.arcade.apiKey;
     if (!apiKey) {
       _logger.debug(
         "No Arcade API key found (checked ARCADE_API_KEY env var and ~/.arcade/credentials.yaml)",
@@ -381,11 +422,11 @@ export class ArcadeMCPServer {
       ? "ARCADE_API_KEY env var"
       : "~/.arcade/credentials.yaml";
     _logger.debug(
-      `Creating Arcade client (key: ${masked}, source: ${source}, baseURL: ${this.settings?.arcade.apiUrl})`,
+      `Creating Arcade client (key: ${masked}, source: ${source}, baseURL: ${this._settings?.arcade.apiUrl})`,
     );
     this.arcadeClient = new Arcade({
       apiKey,
-      baseURL: this.settings?.arcade.apiUrl,
+      baseURL: this._settings?.arcade.apiUrl,
     });
     return this.arcadeClient;
   }
@@ -398,12 +439,12 @@ export class ArcadeMCPServer {
     toolAuth: ToolAuthorization,
     userId: string | undefined,
   ): Promise<{ token?: string; error?: CallToolResult }> {
-    if (this.settings?.arcade.authDisabled) {
+    if (this._settings?.arcade.authDisabled) {
       _logger.debug("Auth resolution skipped: ARCADE_AUTH_DISABLED is set");
       return {};
     }
 
-    const client = this.getArcadeClient();
+    const client = this._getArcadeClient();
     if (!client) {
       _logger.warn(
         "Tool requires auth but no Arcade API key is configured. " +
@@ -487,9 +528,10 @@ export class ArcadeMCPServer {
     }
 
     if (response.status === "pending" || response.status === "not_started") {
+      const providerLabel = toolAuth.providerId ?? "unknown provider";
       const message = response.url
-        ? `Authorization required. Please visit the following URL to authorize, then retry:\n\n${response.url}`
-        : "Authorization is pending. Please complete the authorization flow, then retry.";
+        ? `Authorization required for ${providerLabel}. Please visit the following URL to authorize, then retry:\n\n${response.url}`
+        : `Authorization is pending for ${providerLabel}. Please complete the authorization flow, then retry.`;
       return {
         error: {
           content: [{ type: "text" as const, text: message }],
@@ -513,6 +555,177 @@ export class ArcadeMCPServer {
         isError: true,
       },
     };
+  }
+
+  // ── Cross-tool requirement resolution ────────────────────
+
+  /**
+   * Fetch and merge requirements from remote tools referenced via
+   * requiresSecretsFrom / requestScopesFrom.
+   *
+   * For each local tool that declares these fields, we call
+   * arcade.tools.get(name) to fetch the remote tool's definition and
+   * merge its secret/scope requirements into the local tool's requirements.
+   * This runs before registerCatalogTools() so that the tool definitions
+   * exposed to clients already reflect the merged requirements.
+   */
+  async resolveCrossToolRequirements(): Promise<void> {
+    const client = this._getArcadeClient();
+
+    // Check if any tools actually need resolution
+    let needsResolution = false;
+    for (const tool of this.catalog.getAll()) {
+      if (tool.requiresSecretsFrom?.length || tool.requestScopesFrom?.length) {
+        needsResolution = true;
+        break;
+      }
+    }
+
+    if (!needsResolution) return;
+
+    if (!client) {
+      _logger.warn(
+        "Tools declare requiresSecretsFrom/requestScopesFrom but no " +
+          "Arcade client is configured. Remote requirements will not be resolved. " +
+          "Set ARCADE_API_KEY to enable remote requirement resolution.",
+      );
+      return;
+    }
+
+    // Collect all unique remote tool FQNs we need to look up
+    const remoteFqns = new Set<string>();
+    for (const tool of this.catalog.getAll()) {
+      for (const fqn of tool.requiresSecretsFrom ?? []) {
+        remoteFqns.add(fqn);
+      }
+      for (const fqn of tool.requestScopesFrom ?? []) {
+        remoteFqns.add(fqn);
+      }
+    }
+
+    if (remoteFqns.size === 0) return;
+
+    _logger.debug(
+      `Resolving cross-tool requirements from ${remoteFqns.size} remote tool(s): ${[...remoteFqns].sort().join(", ")}`,
+    );
+
+    // Fetch all remote tool definitions concurrently
+    // biome-ignore lint/suspicious/noExplicitAny: Arcade SDK response type
+    const remoteDefs = new Map<string, any>();
+
+    const fetchResults = await Promise.allSettled(
+      [...remoteFqns].map(async (fqn) => {
+        try {
+          const result = await client.tools.get(fqn);
+          return { fqn, result };
+        } catch (err) {
+          _logger.warn(
+            `Failed to fetch remote tool '${fqn}' for cross-tool requirement resolution: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return { fqn, result: null };
+        }
+      }),
+    );
+
+    for (const settled of fetchResults) {
+      if (settled.status === "fulfilled" && settled.value.result) {
+        remoteDefs.set(settled.value.fqn, settled.value.result);
+      }
+    }
+
+    // Merge requirements into local tools
+    for (const tool of this.catalog.getAll()) {
+      // Merge secrets from referenced tools
+      for (const fqn of tool.requiresSecretsFrom ?? []) {
+        const remote = remoteDefs.get(fqn);
+        if (!remote) continue;
+        const remoteSecrets = remote.requirements?.secrets;
+        if (!remoteSecrets || !Array.isArray(remoteSecrets)) continue;
+
+        if (!tool.secrets) {
+          tool.secrets = [];
+        }
+        const existingKeys = new Set(
+          tool.secrets.map((s: string) => s.toLowerCase()),
+        );
+
+        for (const remoteSecret of remoteSecrets) {
+          const key = remoteSecret.key ?? remoteSecret;
+          if (typeof key === "string" && !existingKeys.has(key.toLowerCase())) {
+            tool.secrets.push(key);
+            existingKeys.add(key.toLowerCase());
+            _logger.debug(
+              `Merged secret '${key}' from '${fqn}' into '${tool.fullyQualifiedName}'`,
+            );
+          }
+        }
+      }
+
+      // Merge scopes from referenced tools — collect per-provider auth requirements
+      const collectedAuths = new Map<string | undefined, ToolAuthorization>();
+
+      // Seed with the tool's own auth if it has one
+      if (tool.auth) {
+        collectedAuths.set(tool.auth.providerId, { ...tool.auth });
+      }
+
+      for (const fqn of tool.requestScopesFrom ?? []) {
+        const remote = remoteDefs.get(fqn);
+        if (!remote) continue;
+        const remoteAuth = remote.requirements?.authorization;
+        if (!remoteAuth) continue;
+
+        const remoteProviderId = remoteAuth.provider_id;
+        const remoteProviderType = remoteAuth.provider_type ?? "oauth2";
+        const remoteScopes = remoteAuth.oauth2?.scopes ?? [];
+
+        const existing = collectedAuths.get(remoteProviderId);
+        if (existing) {
+          // Same provider — merge scopes
+          if (remoteScopes.length > 0) {
+            const existingScopeSet = new Set(existing.scopes ?? []);
+            for (const scope of remoteScopes) {
+              if (!existingScopeSet.has(scope)) {
+                if (!existing.scopes) existing.scopes = [];
+                existing.scopes.push(scope);
+                existingScopeSet.add(scope);
+              }
+            }
+          }
+          _logger.debug(
+            `Merged scopes from '${fqn}' into '${tool.fullyQualifiedName}'`,
+          );
+        } else {
+          // New provider — add a new entry
+          collectedAuths.set(remoteProviderId, {
+            providerId: remoteProviderId,
+            providerType: remoteProviderType,
+            scopes: remoteScopes.length > 0 ? [...remoteScopes] : undefined,
+          });
+          _logger.debug(
+            `Adopted auth provider '${remoteProviderId}' from '${fqn}' for '${tool.fullyQualifiedName}'`,
+          );
+        }
+      }
+
+      // Apply collected auth requirements back to the tool
+      if (collectedAuths.size > 0) {
+        const authList = [...collectedAuths.values()];
+
+        // Always set the first provider as the singular authorization
+        // (backward compat for clients that only read the singular field)
+        tool.auth = authList[0];
+
+        if (authList.length > 1) {
+          // Multi-provider: store the full list
+          tool.resolvedAuthorizations = authList;
+          const providers = authList.map((a) => a.providerId);
+          _logger.info(
+            `Tool '${tool.fullyQualifiedName}' requires auth from ${authList.length} providers: ${providers.join(", ")}`,
+          );
+        }
+      }
+    }
   }
 
   // ── Runtime tool management ──────────────────────────────
@@ -614,7 +827,10 @@ export class ArcadeMCPServer {
     this.mcpServer.registerResource(
       name,
       uri,
-      { description: stored.description, mimeType: stored.mimeType } as never,
+      {
+        description: stored.description,
+        mimeType: stored.mimeType,
+      } as never,
       (async (resourceUri: URL) => {
         return this.resourceManager!.readResource(resourceUri.href);
       }) as never,
@@ -777,15 +993,16 @@ function toCallToolResult(value: unknown): CallToolResult {
     };
   }
 
-  // Object/Array -> JSON text content
+  // Object/Array -> JSON text content with structuredContent
   if (value !== null && value !== undefined) {
+    const text = JSON.stringify(value, null, 2);
+    const structured =
+      typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : { result: value };
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(value, null, 2),
-        },
-      ],
+      content: [{ type: "text", text }],
+      structuredContent: structured,
     };
   }
 

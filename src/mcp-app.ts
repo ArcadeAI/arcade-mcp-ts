@@ -229,7 +229,7 @@ export class MCPApp {
     port: number,
     transportOptions?: TransportOptions,
   ): Promise<void> {
-    this._server = this._createServer();
+    this._server = await this._createServer();
 
     if (transport === "stdio") {
       const { runStdio } = await import("./transports/stdio.js");
@@ -254,7 +254,7 @@ export class MCPApp {
   /**
    * Create a new ArcadeMCPServer and register all components.
    */
-  private _createServer(): ArcadeMCPServer {
+  private async _createServer(): Promise<ArcadeMCPServer> {
     const server = new ArcadeMCPServer(this._catalog, {
       name: this.name,
       version: this.version,
@@ -268,6 +268,9 @@ export class MCPApp {
       promptManager: this._promptManager,
       resourceManager: this._resourceManager,
     });
+
+    // Resolve cross-tool requirements before registering tools
+    await server.resolveCrossToolRequirements();
 
     server.registerCatalogTools();
     server.registerCatalogPrompts();
@@ -291,7 +294,7 @@ export class MCPApp {
     const { watchForChanges } = await import("./transports/dev-reload.js");
     const { setupGracefulShutdown } = await import("./transports/shutdown.js");
 
-    this._server = this._createServer();
+    this._server = await this._createServer();
     let handle: HttpHandle = await startHttp(this._server, {
       ...options,
       auth: this._auth,
@@ -315,7 +318,7 @@ export class MCPApp {
         }
 
         // Create a fresh server and start it
-        this._server = this._createServer();
+        this._server = await this._createServer();
         handle = await startHttp(this._server, {
           ...options,
           auth: this._auth,

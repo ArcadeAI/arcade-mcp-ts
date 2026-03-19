@@ -48,6 +48,10 @@ export interface ToolOptions<T extends z.ZodType = z.ZodType> {
   deprecationMessage?: string;
   /** Behavioral hints mapped to MCP ToolAnnotations. */
   behavior?: ToolBehavior;
+  /** FQNs of remote tools whose secret requirements should be merged into this tool. */
+  requiresSecretsFrom?: string[];
+  /** FQNs of remote tools whose OAuth scopes should be merged into this tool. */
+  requestScopesFrom?: string[];
 }
 
 /**
@@ -69,6 +73,30 @@ export interface ToolContext {
   readonly signal: AbortSignal;
   readonly sessionId?: string;
   readonly requestId: string;
+  readonly tools: ToolContextTools;
+}
+
+/**
+ * Minimal interface for the tools facade exposed on ToolContext.
+ */
+export interface ToolContextTools {
+  call(
+    name: string,
+    params?: Record<string, unknown>,
+  ): Promise<
+    import("@modelcontextprotocol/sdk/types.js").CallToolResult | undefined
+  >;
+  callRaw(
+    name: string,
+    params: Record<string, unknown>,
+  ): Promise<import("@modelcontextprotocol/sdk/types.js").CallToolResult>;
+  execute<T extends import("zod").ZodObject<import("zod").ZodRawShape>>(
+    schema: T,
+    toolName: string,
+    args: Record<string, unknown>,
+    options?: import("./structuring.js").ExecuteOptions,
+  ): Promise<import("zod").infer<T>>;
+  list(): Promise<unknown[]>;
 }
 
 /**
@@ -93,6 +121,12 @@ export interface MaterializedTool {
   deprecationMessage?: string;
   /** Behavioral hints mapped to MCP ToolAnnotations. */
   behavior?: ToolBehavior;
+  /** FQNs of remote tools whose secret requirements should be merged into this tool. */
+  requiresSecretsFrom?: string[];
+  /** FQNs of remote tools whose OAuth scopes should be merged into this tool. */
+  requestScopesFrom?: string[];
+  /** All auth requirements resolved from requestScopesFrom, populated at startup for compound tools. */
+  resolvedAuthorizations?: ToolAuthorization[];
   dateAdded: Date;
   dateUpdated: Date;
 }
