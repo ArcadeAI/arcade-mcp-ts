@@ -65,7 +65,7 @@ app.tool(
     description: "Get a multi-day weather forecast for a city",
     parameters: z.object({
       city: z.string().describe("City name"),
-      days: z
+      days: z.coerce
         .number()
         .int()
         .min(1)

@@ -9,8 +9,8 @@ export const mathTools: Record<
     options: {
       description: "Add two numbers",
       parameters: z.object({
-        a: z.number().describe("First number"),
-        b: z.number().describe("Second number"),
+        a: z.coerce.number().describe("First number"),
+        b: z.coerce.number().describe("Second number"),
       }),
     },
     handler: async (args: { a: number; b: number }) => ({

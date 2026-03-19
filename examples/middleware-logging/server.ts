@@ -76,8 +76,8 @@ app.tool(
   {
     description: "Add two numbers",
     parameters: z.object({
-      a: z.number().describe("First number"),
-      b: z.number().describe("Second number"),
+      a: z.coerce.number().describe("First number"),
+      b: z.coerce.number().describe("Second number"),
     }),
   },
   async (args) => ({ result: args.a + args.b }),
@@ -88,8 +88,8 @@ app.tool(
   {
     description: "Multiply two numbers",
     parameters: z.object({
-      a: z.number().describe("First number"),
-      b: z.number().describe("Second number"),
+      a: z.coerce.number().describe("First number"),
+      b: z.coerce.number().describe("Second number"),
     }),
   },
   async (args) => ({ result: args.a * args.b }),
@@ -100,8 +100,8 @@ app.tool(
   {
     description: "Divide two numbers",
     parameters: z.object({
-      a: z.number().describe("Numerator"),
-      b: z.number().describe("Denominator"),
+      a: z.coerce.number().describe("Numerator"),
+      b: z.coerce.number().describe("Denominator"),
     }),
   },
   async (args) => {

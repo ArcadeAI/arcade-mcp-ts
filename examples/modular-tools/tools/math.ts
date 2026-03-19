@@ -2,13 +2,13 @@ import { z } from "zod";
 import type { ToolHandler, ToolOptions } from "../../../src/index.js";
 
 const addSchema = z.object({
-  a: z.number().describe("First number"),
-  b: z.number().describe("Second number"),
+  a: z.coerce.number().describe("First number"),
+  b: z.coerce.number().describe("Second number"),
 });
 
 const divideSchema = z.object({
-  numerator: z.number().describe("Numerator"),
-  denominator: z.number().describe("Denominator (must not be zero)"),
+  numerator: z.coerce.number().describe("Numerator"),
+  denominator: z.coerce.number().describe("Denominator (must not be zero)"),
 });
 
 export const mathTools: Record<
