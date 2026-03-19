@@ -1,6 +1,6 @@
-import { timingSafeEqual } from "node:crypto";
 import { SpanStatusCode } from "@opentelemetry/api";
 import { Elysia } from "elysia";
+import * as jose from "jose";
 import type { ToolCatalog } from "../catalog.js";
 import { toToolDefinition } from "../catalog.js";
 import { Context } from "../context.js";
@@ -32,6 +32,7 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
     );
   }
   const secret: string = rawSecret;
+  const secretKey = new TextEncoder().encode(secret);
 
   const basePath = options.basePath ?? "/worker";
   const catalog = options.catalog;
@@ -40,19 +41,25 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 
   const app = new Elysia({ prefix: basePath });
 
-  // Auth middleware for worker routes (timing-safe comparison)
-  function validateWorkerAuth(request: Request): boolean {
+  // Auth middleware for worker routes (JWT HS256 verification)
+  async function validateWorkerAuth(request: Request): Promise<boolean> {
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) return false;
-    const token = Buffer.from(authHeader.slice(7));
-    const expected = Buffer.from(secret);
-    if (token.length !== expected.length) return false;
-    return timingSafeEqual(token, expected);
+    const token = authHeader.slice(7);
+    try {
+      const { payload } = await jose.jwtVerify(token, secretKey, {
+        algorithms: ["HS256"],
+        audience: "worker",
+      });
+      return payload.ver === "1";
+    } catch {
+      return false;
+    }
   }
 
   // GET /worker/tools — list available tools
-  app.get("/tools", ({ request }) => {
-    if (!validateWorkerAuth(request)) {
+  app.get("/tools", async ({ request }) => {
+    if (!(await validateWorkerAuth(request))) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
@@ -83,7 +90,7 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 
   // POST /worker/tools/invoke — execute a tool
   app.post("/tools/invoke", async ({ request }) => {
-    if (!validateWorkerAuth(request)) {
+    if (!(await validateWorkerAuth(request))) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },

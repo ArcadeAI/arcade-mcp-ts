@@ -15,6 +15,14 @@ export {
   parseArgs,
 } from "./cli.js";
 export { Context, getCurrentContext, setCurrentContext } from "./context.js";
+// ── Convert ─────────────────────────────────────────────
+export {
+  buildArcadeMeta,
+  convertContentToStructuredContent,
+  convertToMcpContent,
+  createMcpToolConfig,
+  type McpToolConfig,
+} from "./convert.js";
 // ── Errors ───────────────────────────────────────────────
 export {
   ContextRequiredToolError,
@@ -141,6 +149,7 @@ export type {
   ResourceOptions,
   ResourceOwner,
   ResourceServerValidatorInterface,
+  ToolBehavior,
   ToolCallRequest,
   ToolCallResponse,
   ToolContext,

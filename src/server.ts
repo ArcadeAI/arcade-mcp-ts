@@ -11,6 +11,7 @@ import {
   setCurrentContext,
   type ToolContextData,
 } from "./context.js";
+import { createMcpToolConfig } from "./convert.js";
 import { runTool } from "./executor.js";
 import { createLogger } from "./logger.js";
 import type { PromptManager } from "./managers/prompt-manager.js";
@@ -131,11 +132,15 @@ export class ArcadeMCPServer {
    * to inject Context and apply middleware.
    */
   private registerTool(tool: MaterializedTool): void {
+    const config = createMcpToolConfig(tool);
     this.mcpServer.registerTool(
       tool.fullyQualifiedName,
       {
-        description: tool.description,
+        title: config.title,
+        description: config.description,
         inputSchema: tool.parameters as never,
+        annotations: config.annotations,
+        _meta: config._meta,
       },
       (async (args: Record<string, unknown>, extra: ServerExtra) => {
         return this.executeTool(tool, args, extra);
@@ -257,6 +262,7 @@ export class ArcadeMCPServer {
 
         return (await finalHandler(mwContext)) as CallToolResult;
       } finally {
+        await context.notifications.flush();
         setCurrentContext(prevCtx);
       }
     };
@@ -658,11 +664,15 @@ export class ArcadeMCPServer {
     );
 
     for (const tool of this.catalog.getAll()) {
+      const config = createMcpToolConfig(tool);
       session.registerTool(
         tool.fullyQualifiedName,
         {
-          description: tool.description,
+          title: config.title,
+          description: config.description,
           inputSchema: tool.parameters as never,
+          annotations: config.annotations,
+          _meta: config._meta,
         },
         (async (args: Record<string, unknown>, extra: ServerExtra) => {
           return this.executeTool(tool, args, extra);

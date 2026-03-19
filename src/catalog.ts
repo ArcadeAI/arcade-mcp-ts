@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { createMcpToolConfig } from "./convert.js";
 import { ToolDefinitionError } from "./errors.js";
 import {
   type MaterializedTool,
@@ -127,6 +128,9 @@ export class ToolCatalog {
       toolkitName,
       toolkitVersion: normalizedVersion,
       toolkitDescription: resolved?.description,
+      title: options.title,
+      deprecationMessage: options.deprecationMessage,
+      behavior: options.behavior,
       dateAdded: now,
       dateUpdated: now,
     });
@@ -223,10 +227,11 @@ export class ToolCatalog {
  */
 export function toToolDefinition(tool: MaterializedTool): ToolDefinition {
   const zodToJsonSchema = zodToJson(tool.parameters);
+  const config = createMcpToolConfig(tool);
 
   return {
     name: tool.fullyQualifiedName,
-    description: tool.description,
+    description: config.description,
     inputSchema: zodToJsonSchema,
     auth: tool.auth,
     secrets: tool.secrets,
@@ -238,6 +243,8 @@ export function toToolDefinition(tool: MaterializedTool): ToolDefinition {
           description: tool.toolkitDescription,
         }
       : undefined,
+    annotations: config.annotations,
+    _meta: config._meta,
   };
 }
 

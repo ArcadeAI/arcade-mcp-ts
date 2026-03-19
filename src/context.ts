@@ -325,14 +325,100 @@ export class Prompts extends ContextComponent {
 }
 
 /**
+ * Sub-facade for tool list change notifications.
+ */
+class _NotificationsTools {
+  constructor(private parent: Notifications) {}
+
+  async listChanged(): Promise<void> {
+    this.parent.enqueue("notifications/tools/list_changed");
+  }
+}
+
+/**
+ * Sub-facade for resource list change notifications.
+ */
+class _NotificationsResources {
+  constructor(private parent: Notifications) {}
+
+  async listChanged(): Promise<void> {
+    this.parent.enqueue("notifications/resources/list_changed");
+  }
+}
+
+/**
+ * Sub-facade for prompt list change notifications.
+ */
+class _NotificationsPrompts {
+  constructor(private parent: Notifications) {}
+
+  async listChanged(): Promise<void> {
+    this.parent.enqueue("notifications/prompts/list_changed");
+  }
+}
+
+/**
  * Notifications facade: context.notifications.send()
+ *
+ * Provides typed sub-facades for common notification types:
+ * - context.notifications.tools.listChanged()
+ * - context.notifications.resources.listChanged()
+ * - context.notifications.prompts.listChanged()
+ *
+ * Notifications are deduplicated and flushed in batch at end of request.
  */
 export class Notifications extends ContextComponent {
+  readonly tools: _NotificationsTools;
+  readonly resources: _NotificationsResources;
+  readonly prompts: _NotificationsPrompts;
+
+  private _queue = new Set<string>();
+
+  constructor(ctx: Context) {
+    super(ctx);
+    this.tools = new _NotificationsTools(this);
+    this.resources = new _NotificationsResources(this);
+    this.prompts = new _NotificationsPrompts(this);
+  }
+
+  /**
+   * Send an arbitrary notification immediately (not queued).
+   */
   async send(notification: ServerNotification): Promise<void> {
     try {
       await this.ctx.extra.sendNotification?.(notification);
     } catch {
       // Best-effort notification delivery
+    }
+  }
+
+  /**
+   * Enqueue a notification method for batched, deduplicated delivery.
+   * @internal
+   */
+  enqueue(method: string): void {
+    this._queue.add(method);
+  }
+
+  /**
+   * Flush all queued notifications. Called automatically at end of request.
+   * Safe to call multiple times — second call is a no-op if queue is empty.
+   */
+  async flush(): Promise<void> {
+    if (this._queue.size === 0) return;
+
+    const methods = [...this._queue];
+    this._queue.clear();
+
+    for (const method of methods) {
+      try {
+        await this.ctx.extra.sendNotification?.({
+          method,
+          params: {},
+        } as ServerNotification);
+      } catch {
+        // Best-effort — don't let notification failures break the request
+      }
     }
   }
 }
