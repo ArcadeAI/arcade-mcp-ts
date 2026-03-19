@@ -143,5 +143,12 @@ export type {
   ToolOptions,
   TransportOptions,
 } from "./types.js";
+// ── Usage Tracking ──────────────────────────────────────
+export {
+  isTrackingEnabled,
+  type ServerStartParams,
+  ServerTracker,
+  type ToolCallParams,
+} from "./usage/index.js";
 // ── Worker ───────────────────────────────────────────────
 export { createWorkerRoutes } from "./worker/routes.js";

@@ -32,6 +32,7 @@ import type {
   ResourceOwner,
   ResourceServerValidatorInterface,
 } from "./types.js";
+import type { ServerTracker } from "./usage/index.js";
 
 const _logger = createLogger("arcade-mcp-server");
 
@@ -44,6 +45,7 @@ export interface ArcadeMCPServerOptions {
   middleware?: MiddlewareInterface[];
   auth?: ResourceServerValidatorInterface;
   telemetry?: OTELHandler;
+  tracker?: ServerTracker;
   promptManager?: PromptManager;
   resourceManager?: ResourceManager;
 }
@@ -59,6 +61,7 @@ export class ArcadeMCPServer {
   private middlewareChain: MiddlewareInterface[];
   private auth?: ResourceServerValidatorInterface;
   private telemetry?: OTELHandler;
+  private tracker?: ServerTracker;
   private promptManager?: PromptManager;
   private resourceManager?: ResourceManager;
   private name: string;
@@ -72,6 +75,7 @@ export class ArcadeMCPServer {
     this.settings = options.settings;
     this.auth = options.auth;
     this.telemetry = options.telemetry;
+    this.tracker = options.tracker;
     this.promptManager = options.promptManager;
     this.resourceManager = options.resourceManager;
 
@@ -248,14 +252,26 @@ export class ArcadeMCPServer {
       }
     };
 
+    const trackResult = (result: CallToolResult): void => {
+      this.tracker?.trackToolCall({
+        success: !result.isError,
+        failureReason: result.isError
+          ? "error during tool execution"
+          : undefined,
+      });
+    };
+
     if (!tracer) {
-      return executeInner();
+      const result = await executeInner();
+      trackResult(result);
+      return result;
     }
 
     return tracer.startActiveSpan("RunTool", async (span) => {
       span.setAttributes(spanAttributes);
       try {
         const result = await executeInner();
+        trackResult(result);
         return result;
       } catch (err) {
         span.setStatus({ code: SpanStatusCode.ERROR });
