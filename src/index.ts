@@ -14,7 +14,12 @@ export {
   loadToolModulesWithCacheBusting,
   parseArgs,
 } from "./cli.js";
-export { Context, getCurrentContext, setCurrentContext } from "./context.js";
+export {
+  Context,
+  getCurrentContext,
+  setCurrentContext,
+  type ToolExecutor,
+} from "./context.js";
 // ── Convert ─────────────────────────────────────────────
 export {
   buildArcadeMeta,
@@ -114,7 +119,21 @@ export {
   ServerSession,
 } from "./session.js";
 // ── Settings ─────────────────────────────────────────────
-export { loadSettings, type MCPSettings } from "./settings.js";
+export {
+	type AnthropicSettings,
+	loadSettings,
+	type MCPSettings,
+} from "./settings.js";
+// ── Structuring ──────────────────────────────────────────
+export {
+	EXECUTE_DEFAULTS,
+	type ExecuteOptions,
+	makeNullable,
+	OnMissing,
+	structureOutput,
+	toCamelCase,
+	toSnakeCase,
+} from "./structuring.js";
 // ── Telemetry ────────────────────────────────────────────
 export { OTELHandler, type OTELHandlerOptions } from "./telemetry.js";
 export {

@@ -48,6 +48,10 @@ export interface ToolOptions<T extends z.ZodType = z.ZodType> {
   deprecationMessage?: string;
   /** Behavioral hints mapped to MCP ToolAnnotations. */
   behavior?: ToolBehavior;
+  /** FQNs of remote tools whose secret requirements should be merged into this tool. */
+  requiresSecretsFrom?: string[];
+  /** FQNs of remote tools whose OAuth scopes should be merged into this tool. */
+  requestScopesFrom?: string[];
 }
 
 /**
@@ -93,6 +97,12 @@ export interface MaterializedTool {
   deprecationMessage?: string;
   /** Behavioral hints mapped to MCP ToolAnnotations. */
   behavior?: ToolBehavior;
+  /** FQNs of remote tools whose secret requirements should be merged into this tool. */
+  requiresSecretsFrom?: string[];
+  /** FQNs of remote tools whose OAuth scopes should be merged into this tool. */
+  requestScopesFrom?: string[];
+  /** All auth requirements resolved from requestScopesFrom, populated at startup for compound tools. */
+  resolvedAuthorizations?: ToolAuthorization[];
   dateAdded: Date;
   dateUpdated: Date;
 }

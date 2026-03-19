@@ -122,6 +122,9 @@ You can also enable dev mode via the `ARCADE_SERVER_RELOAD=1` environment variab
 - **Dev mode** — auto-reload on file changes with `--dev` flag (HTTP only)
 - **Resumable streams** — optional event store for HTTP stream resumability via `Last-Event-ID`
 - **Evals** — evaluate LLM tool-calling accuracy with critics, rubrics, and Hungarian-optimal matching
+- **Typed tool composition** — call other tools with Zod schemas and tiered response structuring
+- **Cross-tool requirements** — auto-merge secrets and OAuth scopes from remote Arcade tools at startup
+- **Multi-provider auth** — compound tools requiring auth from multiple OAuth providers (e.g., Google + Slack)
 - **Dual transport** — stdio and HTTP (Elysia + StreamableHTTP)
 - **Runtime compatible** — Bun and Node.js (no `Bun.*` APIs in library code)
 
@@ -325,6 +328,89 @@ app.resources.add("data://users", { mimeType: "application/json" }, handler);
 app.resources.remove("data://users");
 app.resources.list(); // returns registered resource URIs
 ```
+
+## Typed Tool Composition
+
+Compound tools can call other tools with type safety and automatic response structuring. Define a Zod schema for the expected response shape, and the framework handles validation and extraction through a tiered strategy.
+
+```typescript
+import { z, type ExecuteOptions, MCPApp, OnMissing } from "@arcadeai/arcade-mcp";
+
+const app = new MCPApp({ name: "CompoundTools", version: "1.0.0" });
+
+const EmailList = z.object({
+  emails: z.array(z.object({
+    subject: z.string(),
+    sender: z.string(),
+    snippet: z.string(),
+  })).default([]),
+});
+
+app.tool(
+  "forward_emails",
+  {
+    description: "Read emails and forward to Slack",
+    parameters: z.object({
+      channel: z.string(),
+      max: z.number().default(5),
+    }),
+    // Auto-merge OAuth scopes from these remote tools at startup
+    requestScopesFrom: ["Gmail.ListEmails", "Slack.SendMessage"],
+  },
+  async (args, context) => {
+    // Typed call — response is validated against EmailList schema
+    const data = await context.tools.execute(
+      EmailList,
+      "Gmail.ListEmails",
+      { n_emails: args.max },
+      { onMissing: OnMissing.ALLOW_NULL, timeoutSeconds: 30 },
+    );
+
+    for (const email of data.emails) {
+      await context.tools.call("Slack.SendMessage", {
+        message: `From: ${email.sender} — ${email.subject}`,
+        channel_name: args.channel,
+      });
+    }
+
+    return { forwarded: data.emails.length };
+  },
+);
+```
+
+### Response Structuring Tiers
+
+`context.tools.execute()` validates the raw tool response through up to four tiers:
+
+| Tier | Strategy | When it runs |
+|---|---|---|
+| **1** | Direct Zod `safeParse` | Always (fastest path) |
+| **2** | Heuristic mapping (unwrap wrappers, normalize keys, flatten) | If Tier 1 fails |
+| **3a** | MCP sampling — ask the connected LLM to extract fields | If Tier 2 fails and sampling is available |
+| **3b** | Anthropic SDK fallback — use Claude directly | If Tier 3a unavailable and `ANTHROPIC_API_KEY` is set |
+
+If all tiers fail and `onMissing: OnMissing.ALLOW_NULL` is set, returns a model with all fields set to `null`.
+
+### Cross-Tool Requirements
+
+Tools can declare dependencies on remote Arcade tools for secrets and OAuth scopes:
+
+```typescript
+app.tool("compound", {
+  description: "Needs Gmail secrets and Slack auth",
+  parameters: z.object({}),
+  // Merge secret requirements from these tools
+  requiresSecretsFrom: ["Gmail.ListEmails"],
+  // Merge OAuth scopes from these tools
+  requestScopesFrom: ["Slack.SendMessage"],
+}, handler);
+```
+
+At startup, the framework fetches remote tool definitions from Arcade Cloud and merges their requirements into the local tool. MCP clients see the full auth/secret requirements at `tools/list` time.
+
+### Multi-Provider Auth
+
+When a compound tool needs auth from multiple OAuth providers (e.g., Google + Slack), the framework creates `resolvedAuthorizations` — an array of provider requirements exposed in tool metadata. Sub-tools handle their own auth via Arcade Cloud during execution.
 
 ## Auth Providers
 
@@ -789,6 +875,9 @@ All settings load from environment variables:
 | `ARCADE_API_URL` | `https://api.arcade.dev` | Arcade API URL |
 | `ARCADE_USER_ID` | — | Default user ID |
 | `ARCADE_TOOL_NAME_SEPARATOR` | `.` | Separator between toolkit and tool name in FQN |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key (Tier 3b structuring fallback) |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Model for Tier 3b extraction |
+| `ANTHROPIC_BASE_URL` | — | Custom Anthropic API base URL |
 
 See [`.env.example`](.env.example) for the full list.
 

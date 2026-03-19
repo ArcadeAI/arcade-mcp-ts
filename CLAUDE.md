@@ -15,9 +15,10 @@ TypeScript port of the Python `arcade-mcp` framework, published as `@arcadeai/ar
 
 - **`src/cli.ts`** — CLI entry point with auto-discovery (`npx @arcadeai/arcade-mcp`)
 - **`src/mcp-app.ts`** — `MCPApp` high-level builder API (entry point for users)
-- **`src/server.ts`** — `ArcadeMCPServer` wrapping SDK's `McpServer`, session registry
+- **`src/server.ts`** — `ArcadeMCPServer` wrapping SDK's `McpServer`, session registry; implements `ToolExecutor`; handles cross-tool requirement resolution and multi-provider auth
 - **`src/session.ts`** — `ServerSession` (state machine, server-initiated requests), `RequestManager`, `NotificationManager`
-- **`src/context.ts`** — `Context` with namespaced facades (log, progress, sampling, ui, etc.)
+- **`src/structuring.ts`** — Tiered response structuring (`structureOutput`, `makeNullable`, `OnMissing` enum)
+- **`src/context.ts`** — `Context` with namespaced facades (log, progress, sampling, ui, etc.); `Tools` facade implements `call()`, `callRaw()`, `execute()` for typed tool composition; `ToolExecutor` interface breaks circular dep with server
 - **`src/logger.ts`** — Shared `createLogger()` factory with JSON/pretty format support (`MCP_LOG_FORMAT`)
 - **`src/catalog.ts`** — `ToolCatalog` + `MaterializedTool` storage
 - **`src/executor.ts`** — Tool execution pipeline (Zod validation, context injection, error handling)

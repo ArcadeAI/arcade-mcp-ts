@@ -1,8 +1,20 @@
-import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ServerNotification,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { ToolAuthorization } from "./auth/types.js";
+import { RetryableToolError, ToolResponseExtractionError } from "./errors.js";
 import { AuthorizationError, NotFoundError } from "./exceptions.js";
 import { createLogger } from "./logger.js";
 import type { ServerSession } from "./session.js";
+import type { MCPSettings } from "./settings.js";
+import {
+  EXECUTE_DEFAULTS,
+  type ExecuteOptions,
+  makeNullable,
+  OnMissing,
+  structureOutput,
+} from "./structuring.js";
 import type { ResourceOwner } from "./types.js";
 
 /**
@@ -47,6 +59,25 @@ export interface ToolContextData {
 }
 
 /**
+ * Interface that the server implements to allow Context.tools to call tools.
+ * Avoids a direct dependency from context.ts -> server.ts.
+ */
+export interface ToolExecutor {
+  /** Execute a tool through the full middleware + auth pipeline. */
+  executeToolByName(
+    name: string,
+    args: Record<string, unknown>,
+    extra: ServerExtra,
+  ): Promise<CallToolResult>;
+  /** Get the Arcade Cloud client (if configured). */
+  getArcadeClient(): unknown | undefined;
+  /** Get settings. */
+  getSettings(): MCPSettings | undefined;
+  /** Check if a tool exists in the catalog. */
+  hasToolInCatalog(name: string): boolean;
+}
+
+/**
  * Context wraps MCP SDK's RequestHandlerExtra and adds Arcade features.
  * Tool handlers receive (args, context: Context).
  */
@@ -66,6 +97,7 @@ export class Context {
   private _requestId: string;
   private _sessionId?: string;
   private _serverSession?: ServerSession;
+  private _toolExecutor?: ToolExecutor;
 
   constructor(
     extra: ServerExtra,
@@ -75,6 +107,7 @@ export class Context {
       resourceOwner?: ResourceOwner;
       toolContext?: ToolContextData;
       serverSession?: ServerSession;
+      toolExecutor?: ToolExecutor;
     },
   ) {
     this._extra = extra;
@@ -86,6 +119,7 @@ export class Context {
       secrets: {},
       metadata: {},
     };
+    this._toolExecutor = options?.toolExecutor;
 
     // Initialize facades
     this.log = new Logs(this);
@@ -124,6 +158,10 @@ export class Context {
 
   get serverSession(): ServerSession | undefined {
     return this._serverSession;
+  }
+
+  get toolExecutor(): ToolExecutor | undefined {
+    return this._toolExecutor;
   }
 
   /**
@@ -246,19 +284,450 @@ export class Resources extends ContextComponent {
 }
 
 /**
- * Tool calling facade: context.tools.call(), .list()
+ * Tool calling facade: context.tools.call(), .callRaw(), .execute()
  */
 export class Tools extends ContextComponent {
+  /**
+   * Call a tool by name and return the raw result.
+   */
   async call(
-    _name: string,
-    _params?: Record<string, unknown>,
-  ): Promise<unknown> {
-    // Delegate to server's tool executor
-    return undefined;
+    name: string,
+    params?: Record<string, unknown>,
+  ): Promise<CallToolResult | undefined> {
+    return this.callRaw(name, params ?? {});
   }
 
+  /**
+   * List available tools.
+   */
   async list(): Promise<unknown[]> {
     return [];
+  }
+
+  /**
+   * Call a tool and return the raw CallToolResult.
+   * Falls back to Arcade Cloud if the tool is not found locally.
+   */
+  async callRaw(
+    name: string,
+    params: Record<string, unknown>,
+  ): Promise<CallToolResult> {
+    const executor = this.ctx.toolExecutor;
+    if (!executor) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "Tool execution not available: no server reference in context",
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Try local execution first
+    if (executor.hasToolInCatalog(name)) {
+      return executor.executeToolByName(name, params, this.ctx.extra);
+    }
+
+    // Not found locally — try Arcade Cloud
+    const arcade = executor.getArcadeClient();
+    if (arcade) {
+      return this._callRemote(name, params);
+    }
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `Tool '${name}' not found locally and no Arcade client configured`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  /**
+   * Execute a tool via Arcade Cloud when it's not available locally.
+   */
+  private async _callRemote(
+    name: string,
+    params: Record<string, unknown>,
+  ): Promise<CallToolResult> {
+    const executor = this.ctx.toolExecutor!;
+    // biome-ignore lint/suspicious/noExplicitAny: Arcade SDK type
+    const arcade = executor.getArcadeClient() as any;
+
+    // Arcade Cloud uses dot notation (e.g., "Gmail.ListEmails")
+    const remoteName = name.includes(".") ? name : name.replace("_", ".");
+    const userId = this.ctx.userId ?? "anonymous";
+
+    try {
+      const response = await arcade.tools.execute({
+        tool_name: remoteName,
+        input: params,
+        user_id: userId,
+      });
+
+      if (
+        response.success &&
+        response.output &&
+        response.output.value !== null &&
+        response.output.value !== undefined
+      ) {
+        const value = response.output.value;
+        const text = typeof value === "string" ? value : JSON.stringify(value);
+        const structured =
+          typeof value === "object" && !Array.isArray(value)
+            ? value
+            : { result: value };
+
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: structured as Record<string, unknown>,
+          isError: false,
+        };
+      }
+
+      const errorMsg = response.output?.error
+        ? String(response.output.error)
+        : "Remote tool execution failed";
+      return {
+        content: [{ type: "text" as const, text: errorMsg }],
+        structuredContent: { error: errorMsg },
+        isError: true,
+      };
+    } catch (err: unknown) {
+      // Check for 403 auth required
+      const status =
+        (err as { status_code?: number; statusCode?: number }).status_code ??
+        (err as { statusCode?: number }).statusCode;
+      const body = (err as { body?: unknown }).body;
+
+      if (
+        status === 403 &&
+        body &&
+        String(body).includes("tool_authorization_required")
+      ) {
+        return this._handleRemoteAuth(remoteName, userId);
+      }
+
+      const errorMsg = `Failed to call remote tool '${remoteName}': ${err instanceof Error ? err.message : String(err)}`;
+      return {
+        content: [{ type: "text" as const, text: errorMsg }],
+        structuredContent: { error: errorMsg },
+        isError: true,
+      };
+    }
+  }
+
+  /**
+   * Handle authorization required for a remote Arcade Cloud tool.
+   */
+  private async _handleRemoteAuth(
+    toolName: string,
+    userId: string,
+  ): Promise<CallToolResult> {
+    const executor = this.ctx.toolExecutor!;
+    // biome-ignore lint/suspicious/noExplicitAny: Arcade SDK type
+    const arcade = executor.getArcadeClient() as any;
+
+    try {
+      const authResponse = await arcade.tools.authorize({
+        tool_name: toolName,
+        user_id: userId,
+      });
+
+      if (authResponse.status === "completed") {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Authorization for '${toolName}' is already complete. Please retry.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const userMessage =
+        `Authorization required\n\n` +
+        `Tool '${toolName}' needs your permission to access your account.\n\n` +
+        `To authorize:\n` +
+        `1. Click this link: ${authResponse.url}\n` +
+        `2. Grant the requested permissions\n` +
+        `3. Return here and try again\n\n` +
+        `This is a one-time setup for this tool.`;
+
+      return {
+        content: [{ type: "text" as const, text: userMessage }],
+        structuredContent: {
+          error: userMessage,
+          message: userMessage,
+          llm_instructions: `Please show the following link to the end user formatted as markdown: ${authResponse.url} \nInform the end user that the tool requires their authorization to be completed before the tool can be executed.`,
+          authorization_url: authResponse.url,
+        },
+        isError: true,
+      };
+    } catch (err) {
+      const errorMsg = `Failed to authorize remote tool '${toolName}': ${err instanceof Error ? err.message : String(err)}`;
+      return {
+        content: [{ type: "text" as const, text: errorMsg }],
+        structuredContent: { error: errorMsg },
+        isError: true,
+      };
+    }
+  }
+
+  /**
+   * Call a tool and structure the result into a typed Zod schema.
+   *
+   * Uses a tiered strategy:
+   *   1. Direct Zod validation
+   *   2. Heuristic field mapping (key normalization, unwrapping)
+   *   3. LLM extraction via MCP sampling (if client supports it)
+   *   3b. Anthropic SDK fallback (if configured)
+   */
+  async execute<T extends import("zod").ZodObject<import("zod").ZodRawShape>>(
+    schema: T,
+    toolName: string,
+    args: Record<string, unknown>,
+    options?: ExecuteOptions,
+  ): Promise<import("zod").infer<T>> {
+    const opts = { ...EXECUTE_DEFAULTS, ...options };
+    const { onMissing, maxRetries, retryDelaySeconds } = opts;
+
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Step 1: Call the tool
+        const rawResult = await this.callRaw(toolName, args);
+
+        if (rawResult.isError) {
+          raiseToolError(toolName, rawResult);
+        }
+
+        // Step 2: Try deterministic structuring (Tiers 1-2)
+        const rawData =
+          rawResult.structuredContent ?? parseTextContent(rawResult);
+        let tier12Result: import("zod").infer<T> | undefined;
+
+        if (rawData !== undefined) {
+          try {
+            tier12Result = structureOutput(schema, rawData, onMissing);
+            // If ALLOW_NULL left some fields as null, prefer Tier 3
+            if (
+              onMissing === OnMissing.ALLOW_NULL &&
+              hasNullFields(tier12Result)
+            ) {
+              // Fall through to sampling
+            } else {
+              return tier12Result;
+            }
+          } catch {
+            // Fall through to Tier 3
+          }
+        }
+
+        // Step 3: LLM extraction via MCP sampling
+        try {
+          return await this._extractViaSampling(schema, rawResult, onMissing);
+        } catch (samplingErr) {
+          // Check if sampling is unavailable (not just failed)
+          const errMsg = String(samplingErr);
+          const unavailable =
+            errMsg.includes("not available") ||
+            errMsg.includes("not supported") ||
+            errMsg.includes("Session not available") ||
+            errMsg.includes("Method not found");
+
+          if (unavailable) {
+            // Try Anthropic SDK fallback
+            try {
+              return await this._extractViaAnthropic(
+                schema,
+                rawResult,
+                onMissing,
+              );
+            } catch {
+              // All LLM paths failed — use partial result or empty
+              if (tier12Result !== undefined) return tier12Result;
+              if (onMissing === OnMissing.ALLOW_NULL) {
+                return makeNullable(schema).parse({});
+              }
+              throw new ToolResponseExtractionError(
+                `All extraction tiers failed for '${toolName}'`,
+              );
+            }
+          }
+
+          // Sampling was available but failed
+          if (tier12Result !== undefined) return tier12Result;
+          if (onMissing === OnMissing.ALLOW_NULL) {
+            return makeNullable(schema).parse({});
+          }
+          throw samplingErr;
+        }
+      } catch (err) {
+        if (err instanceof ToolResponseExtractionError) {
+          throw err; // Non-retryable
+        }
+        if (err instanceof RetryableToolError && attempt < maxRetries) {
+          lastError = err;
+          await sleep(retryDelaySeconds * 1000);
+          continue;
+        }
+        if (
+          (err instanceof SyntaxError || err instanceof TypeError) &&
+          attempt < maxRetries
+        ) {
+          lastError = err as Error;
+          await sleep(retryDelaySeconds * 1000);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new ToolResponseExtractionError(
+      `Failed to extract response after ${maxRetries + 1} attempts`,
+      { developerMessage: lastError?.message },
+    );
+  }
+
+  /**
+   * Tier 3a: Use MCP sampling to extract structured data from raw tool output.
+   */
+  private async _extractViaSampling<
+    T extends import("zod").ZodObject<import("zod").ZodRawShape>,
+  >(
+    schema: T,
+    rawResult: CallToolResult,
+    onMissing: OnMissing,
+  ): Promise<import("zod").infer<T>> {
+    const rawText = extractText(rawResult);
+    const jsonSchema = zodToJsonSchema(schema);
+    const nullInstruction =
+      onMissing === OnMissing.ALLOW_NULL
+        ? " If a field's value cannot be determined from the input, use null."
+        : "";
+
+    const systemPrompt =
+      "You are a data extraction assistant. Extract data from the provided input " +
+      "and return ONLY valid JSON matching the given schema. Do not include any " +
+      `explanation or markdown formatting.${nullInstruction}\n\n` +
+      `Target JSON Schema:\n${JSON.stringify(jsonSchema, null, 2)}`;
+
+    const samplingResult = await this.ctx.sampling.createMessage({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: `Extract data from this tool output:\n\n${rawText}`,
+          },
+        },
+      ],
+      systemPrompt,
+      maxTokens: 2048,
+    });
+
+    if (samplingResult === undefined) {
+      throw new Error("Sampling not available");
+    }
+
+    // Parse LLM response
+    const responseText =
+      typeof samplingResult === "string"
+        ? samplingResult
+        : typeof samplingResult === "object" &&
+              samplingResult !== null &&
+              "text" in (samplingResult as Record<string, unknown>)
+            ? String((samplingResult as Record<string, unknown>).text)
+            : JSON.stringify(samplingResult);
+
+    const parsed = JSON.parse(responseText);
+    return schema.parse(parsed);
+  }
+
+  /**
+   * Tier 3b: Use Anthropic SDK to extract structured data from raw tool output.
+   */
+  private async _extractViaAnthropic<
+    T extends import("zod").ZodObject<import("zod").ZodRawShape>,
+  >(
+    schema: T,
+    rawResult: CallToolResult,
+    onMissing: OnMissing,
+  ): Promise<import("zod").infer<T>> {
+    const settings = this.ctx.toolExecutor?.getSettings()?.anthropic;
+    if (!settings?.apiKey) {
+      throw new ToolResponseExtractionError(
+        "Deterministic structuring failed and Anthropic extraction is unavailable: " +
+          "ANTHROPIC_API_KEY is not set.",
+      );
+    }
+
+    // Lazy import Anthropic SDK
+    let Anthropic: typeof import("@anthropic-ai/sdk").default;
+    try {
+      const mod = await import("@anthropic-ai/sdk");
+      Anthropic = mod.default;
+    } catch {
+      throw new ToolResponseExtractionError(
+        "Anthropic SDK not installed. Install @anthropic-ai/sdk for Tier 3b extraction.",
+      );
+    }
+
+    const client = new Anthropic({
+      apiKey: settings.apiKey,
+      ...(settings.baseUrl ? { baseURL: settings.baseUrl } : {}),
+    });
+
+    const rawText = extractText(rawResult);
+    const jsonSchema = zodToJsonSchema(schema);
+    const nullInstruction =
+      onMissing === OnMissing.ALLOW_NULL
+        ? " If a field's value cannot be determined from the input, use null."
+        : "";
+
+    const toolName = `extract_data`;
+    const systemPrompt = `You are a data extraction assistant. Call the provided tool with fields extracted from the user's input.${nullInstruction}`;
+
+    const response = await client.messages.create({
+      model: settings.model,
+      max_tokens: 2048,
+      system: systemPrompt,
+      tools: [
+        {
+          name: toolName,
+          description: "Extract structured data from the input.",
+          input_schema: {
+            type: "object" as const,
+            ...jsonSchema,
+          },
+        },
+      ],
+      tool_choice: { type: "tool" as const, name: toolName },
+      messages: [
+        {
+          role: "user" as const,
+          content: `Extract data from this tool output:\n\n${rawText}`,
+        },
+      ],
+    });
+
+    const toolUseBlock = response.content.find(
+      (block) => block.type === "tool_use",
+    );
+    if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
+      throw new ToolResponseExtractionError(
+        "Anthropic returned no tool_use block during structured extraction.",
+      );
+    }
+
+    return schema.parse(toolUseBlock.input);
   }
 }
 
@@ -421,4 +890,133 @@ export class Notifications extends ContextComponent {
       }
     }
   }
+}
+
+// ── Helpers ──────────────────────────────────────────────
+
+function raiseToolError(toolName: string, rawResult: CallToolResult): never {
+  let errorMsg = "Unknown error";
+  const structured = rawResult.structuredContent as
+    | Record<string, unknown>
+    | undefined;
+  if (structured) {
+    errorMsg = String(
+      structured.llm_instructions ?? structured.error ?? errorMsg,
+    );
+  }
+  throw new ToolResponseExtractionError(
+    `Tool '${toolName}' returned an error: ${errorMsg}`,
+  );
+}
+
+function hasNullFields(obj: unknown): boolean {
+  if (typeof obj !== "object" || obj === null) return false;
+  for (const value of Object.values(obj)) {
+    if (value === null) return true;
+    if (typeof value === "object" && hasNullFields(value)) return true;
+  }
+  return false;
+}
+
+function parseTextContent(result: CallToolResult): unknown {
+  if (!result.content) return undefined;
+  for (const item of result.content) {
+    if (
+      typeof item === "object" &&
+      item !== null &&
+      "type" in item &&
+      item.type === "text" &&
+      "text" in item
+    ) {
+      try {
+        return JSON.parse(item.text as string);
+      } catch {
+        // Not JSON
+      }
+    }
+  }
+  return undefined;
+}
+
+function extractText(result: CallToolResult): string {
+  // Prefer structuredContent
+  const structured = result.structuredContent as
+    | Record<string, unknown>
+    | undefined;
+  if (structured) {
+    return JSON.stringify(structured);
+  }
+
+  const parts: string[] = [];
+  if (result.content) {
+    for (const item of result.content) {
+      if (
+        typeof item === "object" &&
+        item !== null &&
+        "type" in item &&
+        item.type === "text" &&
+        "text" in item
+      ) {
+        parts.push(item.text as string);
+      }
+    }
+  }
+  return parts.join("\n") || "{}";
+}
+
+/**
+ * Simple Zod-to-JSON-Schema for structuring prompts.
+ */
+function zodToJsonSchema(
+  schema: import("zod").ZodType,
+): Record<string, unknown> {
+  const def = (schema as unknown as { _def: Record<string, unknown> })._def;
+
+  if (def.typeName === "ZodObject") {
+    const shape = (
+      schema as unknown as { shape: Record<string, import("zod").ZodType> }
+    ).shape;
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+
+    for (const [key, value] of Object.entries(shape)) {
+      properties[key] = zodToJsonSchema(value as import("zod").ZodType);
+      const innerDef = (value as unknown as { _def: Record<string, unknown> })
+        ._def;
+      if (
+        innerDef.typeName !== "ZodOptional" &&
+        innerDef.typeName !== "ZodDefault"
+      ) {
+        required.push(key);
+      }
+    }
+
+    return {
+      type: "object",
+      properties,
+      ...(required.length > 0 ? { required } : {}),
+    };
+  }
+
+  if (def.typeName === "ZodString") return { type: "string" };
+  if (def.typeName === "ZodNumber") return { type: "number" };
+  if (def.typeName === "ZodBoolean") return { type: "boolean" };
+  if (def.typeName === "ZodArray") {
+    return {
+      type: "array",
+      items: zodToJsonSchema(def.type as import("zod").ZodType),
+    };
+  }
+  if (def.typeName === "ZodOptional" || def.typeName === "ZodNullable") {
+    return zodToJsonSchema(def.innerType as import("zod").ZodType);
+  }
+  if (def.typeName === "ZodDefault") {
+    return zodToJsonSchema(def.innerType as import("zod").ZodType);
+  }
+
+  return { type: "object" };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

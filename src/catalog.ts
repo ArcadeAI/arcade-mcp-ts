@@ -131,6 +131,8 @@ export class ToolCatalog {
       title: options.title,
       deprecationMessage: options.deprecationMessage,
       behavior: options.behavior,
+      requiresSecretsFrom: options.requiresSecretsFrom,
+      requestScopesFrom: options.requestScopesFrom,
       dateAdded: now,
       dateUpdated: now,
     });
@@ -229,13 +231,28 @@ export function toToolDefinition(tool: MaterializedTool): ToolDefinition {
   const zodToJsonSchema = zodToJson(tool.parameters);
   const config = createMcpToolConfig(tool);
 
+  // Build metadata, including resolved authorizations for compound tools
+  let metadata = tool.metadata;
+  if (tool.resolvedAuthorizations && tool.resolvedAuthorizations.length > 1) {
+    metadata = {
+      ...metadata,
+      _meta: {
+        arcade: {
+          requirements: {
+            authorizations: tool.resolvedAuthorizations,
+          },
+        },
+      },
+    };
+  }
+
   return {
     name: tool.fullyQualifiedName,
     description: config.description,
     inputSchema: zodToJsonSchema,
     auth: tool.auth,
     secrets: tool.secrets,
-    metadata: tool.metadata,
+    metadata,
     toolkit: tool.toolkitName
       ? {
           name: tool.toolkitName,
