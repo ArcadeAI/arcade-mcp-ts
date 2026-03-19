@@ -120,19 +120,19 @@ export {
 } from "./session.js";
 // ── Settings ─────────────────────────────────────────────
 export {
-	type AnthropicSettings,
-	loadSettings,
-	type MCPSettings,
+  type AnthropicSettings,
+  loadSettings,
+  type MCPSettings,
 } from "./settings.js";
 // ── Structuring ──────────────────────────────────────────
 export {
-	EXECUTE_DEFAULTS,
-	type ExecuteOptions,
-	makeNullable,
-	OnMissing,
-	structureOutput,
-	toCamelCase,
-	toSnakeCase,
+  EXECUTE_DEFAULTS,
+  type ExecuteOptions,
+  makeNullable,
+  OnMissing,
+  structureOutput,
+  toCamelCase,
+  toSnakeCase,
 } from "./structuring.js";
 // ── Telemetry ────────────────────────────────────────────
 export { OTELHandler, type OTELHandlerOptions } from "./telemetry.js";
@@ -172,6 +172,7 @@ export type {
   ToolCallRequest,
   ToolCallResponse,
   ToolContext,
+  ToolContextTools,
   ToolDefinition,
   ToolHandler,
   ToolkitInfo,
