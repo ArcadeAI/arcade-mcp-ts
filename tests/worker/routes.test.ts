@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ToolCatalog } from "../../src/catalog.js";
+import { ServerError } from "../../src/exceptions.js";
 import { createWorkerRoutes } from "../../src/worker/routes.js";
 
 const BASE = "http://localhost";
@@ -80,10 +81,9 @@ describe("worker auth", () => {
 		expect(res.status).toBe(200);
 	});
 
-	it("allows all requests when no secret configured", async () => {
-		const app = makeApp({ secret: "" });
-		const res = await app.handle(new Request(`${BASE}/worker/tools`));
-		expect(res.status).toBe(200);
+	it("throws when no secret configured", () => {
+		expect(() => makeApp({ secret: "" })).toThrow(ServerError);
+		expect(() => makeApp({ secret: "" })).toThrow(/ARCADE_WORKER_SECRET/);
 	});
 });
 
