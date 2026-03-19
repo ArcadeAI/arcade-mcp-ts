@@ -314,7 +314,6 @@ export class Tools extends ContextComponent {
   ): Promise<CallToolResult> {
     const executor = this.ctx.toolExecutor;
     if (!executor) {
-      logger.warn("[callRaw] No toolExecutor — tool=%s", name);
       return {
         content: [
           {
@@ -328,40 +327,15 @@ export class Tools extends ContextComponent {
 
     // Try local execution first
     if (executor.hasToolInCatalog(name)) {
-      logger.debug("[callRaw] Executing locally — tool=%s", name);
-      const result = await executor.executeToolByName(
-        name,
-        params,
-        this.ctx.extra,
-      );
-      logger.debug(
-        "[callRaw] Local result — tool=%s isError=%s contentTypes=%s",
-        name,
-        result.isError,
-        result.content.map((c) => c.type).join(","),
-      );
-      return result;
+      return executor.executeToolByName(name, params, this.ctx.extra);
     }
 
     // Not found locally — try Arcade Cloud
     const arcade = executor.getArcadeClient();
     if (arcade) {
-      logger.debug("[callRaw] Not local, calling remote — tool=%s", name);
-      const start = Date.now();
-      const result = await this._callRemote(name, params);
-      logger.debug(
-        "[callRaw] Remote result — tool=%s isError=%s elapsed=%dms",
-        name,
-        result.isError,
-        Date.now() - start,
-      );
-      return result;
+      return this._callRemote(name, params);
     }
 
-    logger.warn(
-      "[callRaw] Tool not found and no Arcade client — tool=%s",
-      name,
-    );
     return {
       content: [
         {
@@ -525,16 +499,6 @@ export class Tools extends ContextComponent {
   ): Promise<import("zod").infer<T>> {
     const opts = { ...EXECUTE_DEFAULTS, ...options };
     const { onMissing, maxRetries, retryDelaySeconds } = opts;
-    const executeStart = Date.now();
-
-    logger.debug(
-      "[execute] Starting — tool=%s onMissing=%s maxRetries=%d",
-      toolName,
-      onMissing,
-      maxRetries,
-    );
-
-    let lastError: Error | undefined;
 
     // Send periodic progress notifications to keep the SSE stream alive
     // during long-running cross-tool calls. Without these, clients may
@@ -568,7 +532,6 @@ export class Tools extends ContextComponent {
         maxRetries,
         retryDelaySeconds,
         onMissing,
-        executeStart,
       );
     } finally {
       stopKeepalive();
@@ -588,46 +551,21 @@ export class Tools extends ContextComponent {
     maxRetries: number,
     retryDelaySeconds: number,
     onMissing: OnMissing,
-    executeStart: number,
   ): Promise<import("zod").infer<T>> {
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         // Step 1: Call the tool
-        logger.debug(
-          "[execute] Attempt %d/%d — calling tool=%s",
-          attempt + 1,
-          maxRetries + 1,
-          toolName,
-        );
-        const callStart = Date.now();
         const rawResult = await this.callRaw(toolName, args);
-        logger.debug(
-          "[execute] callRaw complete — tool=%s elapsed=%dms isError=%s",
-          toolName,
-          Date.now() - callStart,
-          rawResult.isError,
-        );
 
         if (rawResult.isError) {
-          logger.debug(
-            "[execute] Tool returned error — tool=%s content=%s",
-            toolName,
-            extractText(rawResult).slice(0, 200),
-          );
           raiseToolError(toolName, rawResult);
         }
 
         // Step 2: Try deterministic structuring (Tiers 1-2)
         const rawData =
           rawResult.structuredContent ?? parseTextContent(rawResult);
-        logger.debug(
-          "[execute] Structuring — tool=%s hasStructuredContent=%s hasRawData=%s",
-          toolName,
-          !!rawResult.structuredContent,
-          rawData !== undefined,
-        );
         let tier12Result: import("zod").infer<T> | undefined;
 
         if (rawData !== undefined) {
@@ -638,50 +576,21 @@ export class Tools extends ContextComponent {
               onMissing === OnMissing.ALLOW_NULL &&
               hasNullFields(tier12Result)
             ) {
-              logger.debug(
-                "[execute] Tier 1-2 succeeded with null fields, trying Tier 3 — tool=%s",
-                toolName,
-              );
+              // Fall through to sampling
             } else {
-              logger.debug(
-                "[execute] Tier 1-2 succeeded — tool=%s elapsed=%dms",
-                toolName,
-                Date.now() - executeStart,
-              );
               return tier12Result;
             }
-          } catch (structErr) {
-            logger.debug(
-              "[execute] Tier 1-2 failed — tool=%s error=%s",
-              toolName,
-              structErr,
-            );
+          } catch {
+            // Fall through to Tier 3
           }
         }
 
         // Step 3: LLM extraction via MCP sampling
-        logger.debug("[execute] Trying Tier 3a (sampling) — tool=%s", toolName);
         try {
-          const samplingStart = Date.now();
-          const result = await this._extractViaSampling(
-            schema,
-            rawResult,
-            onMissing,
-          );
-          logger.debug(
-            "[execute] Tier 3a succeeded — tool=%s elapsed=%dms",
-            toolName,
-            Date.now() - samplingStart,
-          );
-          return result;
+          return await this._extractViaSampling(schema, rawResult, onMissing);
         } catch (samplingErr) {
           // Check if sampling is unavailable (not just failed)
           const errMsg = String(samplingErr);
-          logger.debug(
-            "[execute] Tier 3a failed — tool=%s error=%s",
-            toolName,
-            errMsg.slice(0, 200),
-          );
           const unavailable =
             errMsg.includes("not available") ||
             errMsg.includes("not supported") ||
@@ -690,43 +599,16 @@ export class Tools extends ContextComponent {
 
           if (unavailable) {
             // Try Anthropic SDK fallback
-            logger.debug(
-              "[execute] Trying Tier 3b (Anthropic) — tool=%s",
-              toolName,
-            );
             try {
-              const anthropicStart = Date.now();
-              const result = await this._extractViaAnthropic(
+              return await this._extractViaAnthropic(
                 schema,
                 rawResult,
                 onMissing,
               );
-              logger.debug(
-                "[execute] Tier 3b succeeded — tool=%s elapsed=%dms",
-                toolName,
-                Date.now() - anthropicStart,
-              );
-              return result;
-            } catch (anthropicErr) {
-              logger.debug(
-                "[execute] Tier 3b failed — tool=%s error=%s",
-                toolName,
-                anthropicErr,
-              );
+            } catch {
               // All LLM paths failed — use partial result or empty
-              if (tier12Result !== undefined) {
-                logger.debug(
-                  "[execute] Falling back to partial Tier 1-2 result — tool=%s",
-                  toolName,
-                );
-                return tier12Result;
-              }
+              if (tier12Result !== undefined) return tier12Result;
               if (onMissing === OnMissing.ALLOW_NULL) {
-                logger.debug(
-                  "[execute] All tiers failed, returning nullable empty — tool=%s elapsed=%dms",
-                  toolName,
-                  Date.now() - executeStart,
-                );
                 return makeNullable(schema).parse({});
               }
               throw new ToolResponseExtractionError(
@@ -744,23 +626,10 @@ export class Tools extends ContextComponent {
         }
       } catch (err) {
         if (err instanceof ToolResponseExtractionError) {
-          logger.error(
-            "[execute] Non-retryable error — tool=%s elapsed=%dms error=%s",
-            toolName,
-            Date.now() - executeStart,
-            err.message,
-          );
-          throw err;
+          throw err; // Non-retryable
         }
         if (err instanceof RetryableToolError && attempt < maxRetries) {
           lastError = err;
-          logger.debug(
-            "[execute] Retryable error, waiting %ds — tool=%s attempt=%d error=%s",
-            retryDelaySeconds,
-            toolName,
-            attempt + 1,
-            err.message,
-          );
           await sleep(retryDelaySeconds * 1000);
           continue;
         }
@@ -769,30 +638,13 @@ export class Tools extends ContextComponent {
           attempt < maxRetries
         ) {
           lastError = err as Error;
-          logger.debug(
-            "[execute] Parse error, retrying — tool=%s attempt=%d error=%s",
-            toolName,
-            attempt + 1,
-            (err as Error).message,
-          );
           await sleep(retryDelaySeconds * 1000);
           continue;
         }
-        logger.error(
-          "[execute] Unhandled error — tool=%s elapsed=%dms error=%s",
-          toolName,
-          Date.now() - executeStart,
-          err,
-        );
         throw err;
       }
     }
 
-    logger.error(
-      "[execute] All attempts exhausted — tool=%s elapsed=%dms",
-      toolName,
-      Date.now() - executeStart,
-    );
     throw new ToolResponseExtractionError(
       `Failed to extract response after ${maxRetries + 1} attempts`,
       { developerMessage: lastError?.message },
