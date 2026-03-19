@@ -51,12 +51,6 @@ const ForwardedEmail = z.object({
 	sentToSlack: z.boolean(),
 });
 
-const ForwardResult = z.object({
-	forwarded: z.number(),
-	total: z.number(),
-	emails: z.array(ForwardedEmail),
-});
-
 // ── Default options — resilient to upstream response changes ─
 
 const DEFAULT_OPTIONS: ExecuteOptions = {
@@ -84,47 +78,83 @@ app.tool(
 				.default(5)
 				.describe("Maximum number of emails to forward"),
 		}),
-		// Cross-tool auth: this compound tool needs auth from both Gmail and Slack.
-		// At startup, their scopes are fetched from Arcade Cloud and merged into
-		// this tool's requirements, so MCP clients see the full auth needs at list time.
 		requestScopesFrom: ["Gmail.ListEmails", "Slack.SendMessage"],
 	},
 	async (args, context) => {
-		// Step 1: Fetch emails via Gmail tool
-		const emailData = await context.tools.execute(
-			EmailList,
-			"Gmail.ListEmails",
-			{ n_emails: args.max_emails },
-			DEFAULT_OPTIONS,
+		const log = (...msg: unknown[]) =>
+			console.log(`[forward_emails_to_slack]`, ...msg);
+
+		log(
+			"Starting — channel=%s max_emails=%d",
+			args.channel_name,
+			args.max_emails,
 		);
 
+		log("Calling Gmail.ListEmails...");
+		let emailData: z.infer<typeof EmailList>;
+		try {
+			emailData = await context.tools.execute(
+				EmailList,
+				"Gmail.ListEmails",
+				{ n_emails: args.max_emails },
+				DEFAULT_OPTIONS,
+			);
+			log("Gmail returned %d emails", emailData.emails?.length ?? 0);
+		} catch (err) {
+			log("Gmail.ListEmails FAILED:", err);
+			throw err;
+		}
+
 		if (!emailData.emails || emailData.emails.length === 0) {
+			log("No emails to forward");
 			return { forwarded: 0, total: 0, emails: [] };
 		}
 
-		// Step 2: Send each email as a Slack message
 		const results: z.infer<typeof ForwardedEmail>[] = [];
-		for (const email of emailData.emails) {
+		for (let i = 0; i < emailData.emails.length; i++) {
+			const email = emailData.emails[i];
 			const message = `*From:* ${email.sender}\n*Subject:* ${email.subject}\n> ${email.snippet}`;
 
-			const slackResult = await context.tools.execute(
-				SlackResponse,
-				"Slack.SendMessage",
-				{
-					message,
-					channel_name: args.channel_name,
-				},
-				DEFAULT_OPTIONS,
+			log(
+				"Sending email %d/%d to Slack (from: %s)...",
+				i + 1,
+				emailData.emails.length,
+				email.sender,
 			);
+			try {
+				const slackResult = await context.tools.execute(
+					SlackResponse,
+					"Slack.SendMessage",
+					{
+						message,
+						channel_name: args.channel_name,
+					},
+					DEFAULT_OPTIONS,
+				);
+				log(
+					"Slack response: ok=%s channel=%s ts=%s",
+					slackResult.ok,
+					slackResult.channel,
+					slackResult.ts,
+				);
 
-			results.push({
-				sender: email.sender,
-				snippet: email.snippet,
-				sentToSlack: Boolean(slackResult.ok),
-			});
+				results.push({
+					sender: email.sender,
+					snippet: email.snippet,
+					sentToSlack: Boolean(slackResult.ok),
+				});
+			} catch (err) {
+				log("Slack.SendMessage FAILED for email %d:", i + 1, err);
+				results.push({
+					sender: email.sender,
+					snippet: email.snippet,
+					sentToSlack: false,
+				});
+			}
 		}
 
 		const forwarded = results.filter((r) => r.sentToSlack).length;
+		log("Done — forwarded %d/%d emails", forwarded, results.length);
 		return {
 			forwarded,
 			total: results.length,
@@ -133,4 +163,4 @@ app.tool(
 	},
 );
 
-app.run();
+app.run({ transport: "http", port: 8080 });
