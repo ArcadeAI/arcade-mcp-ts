@@ -7,74 +7,74 @@ import { MCPApp } from "./mcp-app.js";
 
 /** Parsed CLI arguments. */
 export interface CLIArgs {
-	transport: "stdio" | "http";
-	host: string;
-	port: number;
-	name: string;
-	dir: string;
-	dev: boolean;
-	help: boolean;
-	version: boolean;
+  transport: "stdio" | "http";
+  host: string;
+  port: number;
+  name: string;
+  dir: string;
+  dev: boolean;
+  help: boolean;
+  version: boolean;
 }
 
 /** Parse process.argv into CLIArgs. */
 export function parseArgs(argv: string[]): CLIArgs {
-	const args: CLIArgs = {
-		transport: "stdio",
-		host: "127.0.0.1",
-		port: 8000,
-		name: basename(process.cwd()),
-		dir: process.cwd(),
-		dev: false,
-		help: false,
-		version: false,
-	};
+  const args: CLIArgs = {
+    transport: "stdio",
+    host: "127.0.0.1",
+    port: 8000,
+    name: basename(process.cwd()),
+    dir: process.cwd(),
+    dev: false,
+    help: false,
+    version: false,
+  };
 
-	for (let i = 0; i < argv.length; i++) {
-		const arg = argv[i];
-		switch (arg) {
-			case "--http":
-				args.transport = "http";
-				break;
-			case "--host":
-				args.host = argv[++i] ?? args.host;
-				break;
-			case "--port":
-				args.port = Number.parseInt(argv[++i] ?? "8000", 10);
-				break;
-			case "--name":
-				args.name = argv[++i] ?? args.name;
-				break;
-			case "--dir":
-				args.dir = resolve(argv[++i] ?? ".");
-				break;
-			case "--dev":
-				args.dev = true;
-				break;
-			case "--help":
-			case "-h":
-				args.help = true;
-				break;
-			case "--version":
-			case "-v":
-				args.version = true;
-				break;
-		}
-	}
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--http":
+        args.transport = "http";
+        break;
+      case "--host":
+        args.host = argv[++i] ?? args.host;
+        break;
+      case "--port":
+        args.port = Number.parseInt(argv[++i] ?? "8000", 10);
+        break;
+      case "--name":
+        args.name = argv[++i] ?? args.name;
+        break;
+      case "--dir":
+        args.dir = resolve(argv[++i] ?? ".");
+        break;
+      case "--dev":
+        args.dev = true;
+        break;
+      case "--help":
+      case "-h":
+        args.help = true;
+        break;
+      case "--version":
+      case "-v":
+        args.version = true;
+        break;
+    }
+  }
 
-	return args;
+  return args;
 }
 
 /**
  * Check if a value looks like a tool export: `{ options: { description, parameters }, handler }`.
  */
 export function isToolExport(value: unknown): boolean {
-	if (typeof value !== "object" || value === null) return false;
-	const obj = value as Record<string, unknown>;
-	if (typeof obj.handler !== "function") return false;
-	if (typeof obj.options !== "object" || obj.options === null) return false;
-	const opts = obj.options as Record<string, unknown>;
-	return typeof opts.description === "string" && opts.parameters != null;
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.handler !== "function") return false;
+  if (typeof obj.options !== "object" || obj.options === null) return false;
+  const opts = obj.options as Record<string, unknown>;
+  return typeof opts.description === "string" && opts.parameters != null;
 }
 
 /**
@@ -82,65 +82,65 @@ export function isToolExport(value: unknown): boolean {
  * Matches: `*.tools.{ts,js,mts,mjs}` anywhere, and any `{ts,js,mts,mjs}` file inside a `tools/` directory.
  */
 export async function discoverToolModules(dir: string): Promise<string[]> {
-	const toolExtensions = new Set([".ts", ".js", ".mts", ".mjs"]);
-	const results: string[] = [];
+  const toolExtensions = new Set([".ts", ".js", ".mts", ".mjs"]);
+  const results: string[] = [];
 
-	async function scan(current: string, inToolsDir: boolean): Promise<void> {
-		let entries: import("node:fs").Dirent[];
-		try {
-			entries = await readdir(current, { withFileTypes: true });
-		} catch {
-			return; // directory doesn't exist or isn't readable
-		}
+  async function scan(current: string, inToolsDir: boolean): Promise<void> {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch {
+      return; // directory doesn't exist or isn't readable
+    }
 
-		for (const entry of entries) {
-			const name = String(entry.name);
-			const fullPath = join(current, name);
+    for (const entry of entries) {
+      const name = String(entry.name);
+      const fullPath = join(current, name);
 
-			if (entry.isDirectory()) {
-				// Recurse into tools/ directories; skip node_modules, hidden dirs, dist
-				if (
-					name === "node_modules" ||
-					name === "dist" ||
-					name.startsWith(".")
-				) {
-					continue;
-				}
-				await scan(fullPath, inToolsDir || name === "tools");
-				continue;
-			}
+      if (entry.isDirectory()) {
+        // Recurse into tools/ directories; skip node_modules, hidden dirs, dist
+        if (
+          name === "node_modules" ||
+          name === "dist" ||
+          name.startsWith(".")
+        ) {
+          continue;
+        }
+        await scan(fullPath, inToolsDir || name === "tools");
+        continue;
+      }
 
-			if (!entry.isFile()) continue;
+      if (!entry.isFile()) continue;
 
-			// Check file extension
-			const extIndex = name.lastIndexOf(".");
-			if (extIndex === -1) continue;
+      // Check file extension
+      const extIndex = name.lastIndexOf(".");
+      if (extIndex === -1) continue;
 
-			// Handle double extensions like .tools.ts
-			const parts = name.split(".");
-			const ext = `.${parts[parts.length - 1]}`;
-			if (!toolExtensions.has(ext)) continue;
+      // Handle double extensions like .tools.ts
+      const parts = name.split(".");
+      const ext = `.${parts[parts.length - 1]}`;
+      if (!toolExtensions.has(ext)) continue;
 
-			// Skip test files
-			if (
-				name.includes(".test.") ||
-				name.includes(".spec.") ||
-				name.startsWith("test_")
-			) {
-				continue;
-			}
+      // Skip test files
+      if (
+        name.includes(".test.") ||
+        name.includes(".spec.") ||
+        name.startsWith("test_")
+      ) {
+        continue;
+      }
 
-			// Match *.tools.{ext} or any file inside a tools/ directory
-			const isToolsFile =
-				parts.length >= 3 && parts[parts.length - 2] === "tools";
-			if (isToolsFile || inToolsDir) {
-				results.push(fullPath);
-			}
-		}
-	}
+      // Match *.tools.{ext} or any file inside a tools/ directory
+      const isToolsFile =
+        parts.length >= 3 && parts[parts.length - 2] === "tools";
+      if (isToolsFile || inToolsDir) {
+        results.push(fullPath);
+      }
+    }
+  }
 
-	await scan(dir, false);
-	return results.sort();
+  await scan(dir, false);
+  return results.sort();
 }
 
 /**
@@ -148,73 +148,73 @@ export async function discoverToolModules(dir: string): Promise<string[]> {
  * Returns an array of `Record<string, { options, handler }>` suitable for `addToolsFrom()`.
  */
 export async function loadToolModules(files: string[]): Promise<
-	{
-		file: string;
-		tools: Record<string, { options: unknown; handler: unknown }>;
-	}[]
+  {
+    file: string;
+    tools: Record<string, { options: unknown; handler: unknown }>;
+  }[]
 > {
-	const results: {
-		file: string;
-		tools: Record<string, { options: unknown; handler: unknown }>;
-	}[] = [];
+  const results: {
+    file: string;
+    tools: Record<string, { options: unknown; handler: unknown }>;
+  }[] = [];
 
-	for (const file of files) {
-		let mod: Record<string, unknown>;
-		try {
-			mod = await import(pathToFileURL(file).href);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			if (
-				file.endsWith(".ts") &&
-				(message.includes("Unknown file extension") ||
-					message.includes("Cannot use import statement"))
-			) {
-				console.error(
-					`Warning: Cannot import TypeScript file "${file}" under Node.js.\n` +
-						"  Use Bun, or run with: npx tsx --import tsx node_modules/.bin/arcade-mcp\n",
-				);
-			} else {
-				console.error(`Warning: Failed to import "${file}": ${message}`);
-			}
-			continue;
-		}
+  for (const file of files) {
+    let mod: Record<string, unknown>;
+    try {
+      mod = await import(pathToFileURL(file).href);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (
+        file.endsWith(".ts") &&
+        (message.includes("Unknown file extension") ||
+          message.includes("Cannot use import statement"))
+      ) {
+        console.error(
+          `Warning: Cannot import TypeScript file "${file}" under Node.js.\n` +
+            "  Use Bun, or run with: npx tsx --import tsx node_modules/.bin/arcade-mcp\n",
+        );
+      } else {
+        console.error(`Warning: Failed to import "${file}": ${message}`);
+      }
+      continue;
+    }
 
-		// Collect tool records from all exports
-		const tools: Record<string, { options: unknown; handler: unknown }> = {};
+    // Collect tool records from all exports
+    const tools: Record<string, { options: unknown; handler: unknown }> = {};
 
-		for (const [exportName, exportValue] of Object.entries(mod)) {
-			if (exportName === "__esModule") continue;
+    for (const [exportName, exportValue] of Object.entries(mod)) {
+      if (exportName === "__esModule") continue;
 
-			// Direct tool export: export const myTool = { options, handler }
-			if (isToolExport(exportValue)) {
-				tools[exportName] = exportValue as {
-					options: unknown;
-					handler: unknown;
-				};
-				continue;
-			}
+      // Direct tool export: export const myTool = { options, handler }
+      if (isToolExport(exportValue)) {
+        tools[exportName] = exportValue as {
+          options: unknown;
+          handler: unknown;
+        };
+        continue;
+      }
 
-			// Record of tools: export const mathTools = { add: { options, handler }, ... }
-			if (typeof exportValue === "object" && exportValue !== null) {
-				for (const [toolName, toolDef] of Object.entries(
-					exportValue as Record<string, unknown>,
-				)) {
-					if (isToolExport(toolDef)) {
-						tools[toolName] = toolDef as {
-							options: unknown;
-							handler: unknown;
-						};
-					}
-				}
-			}
-		}
+      // Record of tools: export const mathTools = { add: { options, handler }, ... }
+      if (typeof exportValue === "object" && exportValue !== null) {
+        for (const [toolName, toolDef] of Object.entries(
+          exportValue as Record<string, unknown>,
+        )) {
+          if (isToolExport(toolDef)) {
+            tools[toolName] = toolDef as {
+              options: unknown;
+              handler: unknown;
+            };
+          }
+        }
+      }
+    }
 
-		if (Object.keys(tools).length > 0) {
-			results.push({ file, tools });
-		}
-	}
+    if (Object.keys(tools).length > 0) {
+      results.push({ file, tools });
+    }
+  }
 
-	return results;
+  return results;
 }
 
 /**
@@ -222,65 +222,65 @@ export async function loadToolModules(files: string[]): Promise<
  * so that the runtime re-evaluates the module instead of returning a cached copy.
  */
 export async function loadToolModulesWithCacheBusting(files: string[]): Promise<
-	{
-		file: string;
-		tools: Record<string, { options: unknown; handler: unknown }>;
-	}[]
+  {
+    file: string;
+    tools: Record<string, { options: unknown; handler: unknown }>;
+  }[]
 > {
-	const results: {
-		file: string;
-		tools: Record<string, { options: unknown; handler: unknown }>;
-	}[] = [];
+  const results: {
+    file: string;
+    tools: Record<string, { options: unknown; handler: unknown }>;
+  }[] = [];
 
-	const cacheBust = `?t=${Date.now()}`;
+  const cacheBust = `?t=${Date.now()}`;
 
-	for (const file of files) {
-		let mod: Record<string, unknown>;
-		try {
-			mod = await import(`${pathToFileURL(file).href}${cacheBust}`);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			console.error(`Warning: Failed to import "${file}": ${message}`);
-			continue;
-		}
+  for (const file of files) {
+    let mod: Record<string, unknown>;
+    try {
+      mod = await import(`${pathToFileURL(file).href}${cacheBust}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Warning: Failed to import "${file}": ${message}`);
+      continue;
+    }
 
-		const tools: Record<string, { options: unknown; handler: unknown }> = {};
+    const tools: Record<string, { options: unknown; handler: unknown }> = {};
 
-		for (const [exportName, exportValue] of Object.entries(mod)) {
-			if (exportName === "__esModule") continue;
+    for (const [exportName, exportValue] of Object.entries(mod)) {
+      if (exportName === "__esModule") continue;
 
-			if (isToolExport(exportValue)) {
-				tools[exportName] = exportValue as {
-					options: unknown;
-					handler: unknown;
-				};
-				continue;
-			}
+      if (isToolExport(exportValue)) {
+        tools[exportName] = exportValue as {
+          options: unknown;
+          handler: unknown;
+        };
+        continue;
+      }
 
-			if (typeof exportValue === "object" && exportValue !== null) {
-				for (const [toolName, toolDef] of Object.entries(
-					exportValue as Record<string, unknown>,
-				)) {
-					if (isToolExport(toolDef)) {
-						tools[toolName] = toolDef as {
-							options: unknown;
-							handler: unknown;
-						};
-					}
-				}
-			}
-		}
+      if (typeof exportValue === "object" && exportValue !== null) {
+        for (const [toolName, toolDef] of Object.entries(
+          exportValue as Record<string, unknown>,
+        )) {
+          if (isToolExport(toolDef)) {
+            tools[toolName] = toolDef as {
+              options: unknown;
+              handler: unknown;
+            };
+          }
+        }
+      }
+    }
 
-		if (Object.keys(tools).length > 0) {
-			results.push({ file, tools });
-		}
-	}
+    if (Object.keys(tools).length > 0) {
+      results.push({ file, tools });
+    }
+  }
 
-	return results;
+  return results;
 }
 
 function printUsage(): void {
-	console.log(`Usage: arcade-mcp [options]
+  console.log(`Usage: arcade-mcp [options]
 
 Auto-discover tool modules and start an MCP server.
 
@@ -315,115 +315,115 @@ Environment Variables:
 }
 
 async function main(): Promise<void> {
-	const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(process.argv.slice(2));
 
-	if (args.help) {
-		printUsage();
-		process.exit(0);
-	}
+  if (args.help) {
+    printUsage();
+    process.exit(0);
+  }
 
-	if (args.version) {
-		// Read version from package.json at build time this is in the dist/ parent
-		try {
-			const pkgPath = new URL("../package.json", import.meta.url);
-			const pkg = await import(pkgPath.href, { with: { type: "json" } });
-			console.log(pkg.default?.version ?? "unknown");
-		} catch {
-			console.log("unknown");
-		}
-		process.exit(0);
-	}
+  if (args.version) {
+    // Read version from package.json at build time this is in the dist/ parent
+    try {
+      const pkgPath = new URL("../package.json", import.meta.url);
+      const pkg = await import(pkgPath.href, { with: { type: "json" } });
+      console.log(pkg.default?.version ?? "unknown");
+    } catch {
+      console.log("unknown");
+    }
+    process.exit(0);
+  }
 
-	// Sanitize app name: replace hyphens/spaces with underscores, ensure starts with letter
-	let appName = args.name
-		.replace(/[^a-zA-Z0-9_]/g, "_")
-		.replace(/^[^a-zA-Z]/, "A");
-	if (!appName || appName === "_") appName = "arcade_mcp";
+  // Sanitize app name: replace hyphens/spaces with underscores, ensure starts with letter
+  let appName = args.name
+    .replace(/[^a-zA-Z0-9_]/g, "_")
+    .replace(/^[^a-zA-Z]/, "A");
+  if (!appName || appName === "_") appName = "arcade_mcp";
 
-	console.error(`Discovering tools in ${args.dir}...`);
+  console.error(`Discovering tools in ${args.dir}...`);
 
-	const files = await discoverToolModules(args.dir);
-	if (files.length === 0) {
-		console.error(
-			"Error: No tool modules found.\n\n" +
-				"Searched for:\n" +
-				"  - *.tools.ts, *.tools.js  (e.g., math.tools.ts)\n" +
-				"  - tools/**/*.ts, tools/**/*.js  (any file in a tools/ directory)\n\n" +
-				`Scanned directory: ${args.dir}\n\n` +
-				"Create a tool module to get started. Example:\n\n" +
-				"  // tools/greet.ts\n" +
-				'  import { z } from "zod";\n' +
-				"  export const greetTools = {\n" +
-				"    greet: {\n" +
-				'      options: { description: "Greet someone", parameters: z.object({ name: z.string() }) },\n' +
-				"      handler: async (args) => 'Hello, ' + args.name + '!'\n" +
-				"    }\n" +
-				"  };",
-		);
-		process.exit(1);
-	}
+  const files = await discoverToolModules(args.dir);
+  if (files.length === 0) {
+    console.error(
+      "Error: No tool modules found.\n\n" +
+        "Searched for:\n" +
+        "  - *.tools.ts, *.tools.js  (e.g., math.tools.ts)\n" +
+        "  - tools/**/*.ts, tools/**/*.js  (any file in a tools/ directory)\n\n" +
+        `Scanned directory: ${args.dir}\n\n` +
+        "Create a tool module to get started. Example:\n\n" +
+        "  // tools/greet.ts\n" +
+        '  import { z } from "zod";\n' +
+        "  export const greetTools = {\n" +
+        "    greet: {\n" +
+        '      options: { description: "Greet someone", parameters: z.object({ name: z.string() }) },\n' +
+        "      handler: async (args) => 'Hello, ' + args.name + '!'\n" +
+        "    }\n" +
+        "  };",
+    );
+    process.exit(1);
+  }
 
-	console.error(`Found ${files.length} tool module(s):`);
-	for (const f of files) {
-		console.error(`  ${f}`);
-	}
+  console.error(`Found ${files.length} tool module(s):`);
+  for (const f of files) {
+    console.error(`  ${f}`);
+  }
 
-	const loaded = await loadToolModules(files);
-	if (loaded.length === 0) {
-		console.error(
-			"Error: Found tool files but no valid tool exports.\n" +
-				"Each export should have { options: { description, parameters }, handler }.",
-		);
-		process.exit(1);
-	}
+  const loaded = await loadToolModules(files);
+  if (loaded.length === 0) {
+    console.error(
+      "Error: Found tool files but no valid tool exports.\n" +
+        "Each export should have { options: { description, parameters }, handler }.",
+    );
+    process.exit(1);
+  }
 
-	const app = new MCPApp({ name: appName });
+  const app = new MCPApp({ name: appName });
 
-	let totalTools = 0;
-	for (const { tools } of loaded) {
-		// Dynamic imports are duck-type validated by loadToolModules, safe to cast
-		app.addToolsFrom(tools as Parameters<MCPApp["addToolsFrom"]>[0]);
-		totalTools += Object.keys(tools).length;
-	}
+  let totalTools = 0;
+  for (const { tools } of loaded) {
+    // Dynamic imports are duck-type validated by loadToolModules, safe to cast
+    app.addToolsFrom(tools as Parameters<MCPApp["addToolsFrom"]>[0]);
+    totalTools += Object.keys(tools).length;
+  }
 
-	// Set up dev-mode reload: re-discover and re-import tool modules
-	if (args.dev) {
-		app.onReload(async () => {
-			app.catalog.clear();
+  // Set up dev-mode reload: re-discover and re-import tool modules
+  if (args.dev) {
+    app.onReload(async () => {
+      app.catalog.clear();
 
-			const freshFiles = await discoverToolModules(args.dir);
-			const freshLoaded = await loadToolModulesWithCacheBusting(freshFiles);
+      const freshFiles = await discoverToolModules(args.dir);
+      const freshLoaded = await loadToolModulesWithCacheBusting(freshFiles);
 
-			let count = 0;
-			for (const { tools } of freshLoaded) {
-				app.addToolsFrom(tools as Parameters<MCPApp["addToolsFrom"]>[0]);
-				count += Object.keys(tools).length;
-			}
+      let count = 0;
+      for (const { tools } of freshLoaded) {
+        app.addToolsFrom(tools as Parameters<MCPApp["addToolsFrom"]>[0]);
+        count += Object.keys(tools).length;
+      }
 
-			console.error(`Reloaded ${count} tool(s).`);
-		});
-	}
+      console.error(`Reloaded ${count} tool(s).`);
+    });
+  }
 
-	console.error(
-		`Registered ${totalTools} tool(s). Starting ${args.transport} server...`,
-	);
+  console.error(
+    `Registered ${totalTools} tool(s). Starting ${args.transport} server...`,
+  );
 
-	await app.run({
-		transport: args.transport,
-		host: args.host,
-		port: args.port,
-		dev: args.dev,
-	});
+  await app.run({
+    transport: args.transport,
+    host: args.host,
+    port: args.port,
+    dev: args.dev,
+  });
 }
 
 // Only run main() when executed directly (not when imported for testing)
 const isDirectExecution =
-	process.argv[1] &&
-	(process.argv[1].endsWith("/cli.js") || process.argv[1].endsWith("/cli.ts"));
+  process.argv[1] &&
+  (process.argv[1].endsWith("/cli.js") || process.argv[1].endsWith("/cli.ts"));
 
 if (isDirectExecution) {
-	main().catch((err) => {
-		console.error("Fatal error:", err);
-		process.exit(1);
-	});
+  main().catch((err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
 }
