@@ -14,7 +14,7 @@ app.tool(
   {
     description: "List upcoming Google Calendar events",
     parameters: z.object({
-      max_results: z
+      max_results: z.coerce
         .number()
         .int()
         .min(1)

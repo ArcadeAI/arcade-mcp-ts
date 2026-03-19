@@ -35,7 +35,10 @@ app.tool(
     description: "Echo after a delay (simulates a long-running tool)",
     parameters: z.object({
       message: z.string().describe("The message to echo"),
-      delayMs: z.number().default(2000).describe("Delay in milliseconds"),
+      delayMs: z.coerce
+        .number()
+        .default(2000)
+        .describe("Delay in milliseconds"),
     }),
   },
   async (args) => {

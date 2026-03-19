@@ -22,7 +22,7 @@ app.tool(
       "Echo a message while demonstrating context.log and context.progress",
     parameters: z.object({
       message: z.string().describe("Message to echo"),
-      steps: z
+      steps: z.coerce
         .number()
         .int()
         .min(1)
