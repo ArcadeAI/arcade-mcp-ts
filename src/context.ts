@@ -695,10 +695,10 @@ export class Tools extends ContextComponent {
       typeof samplingResult === "string"
         ? samplingResult
         : typeof samplingResult === "object" &&
-              samplingResult !== null &&
-              "text" in (samplingResult as Record<string, unknown>)
-            ? String((samplingResult as Record<string, unknown>).text)
-            : JSON.stringify(samplingResult);
+            samplingResult !== null &&
+            "text" in (samplingResult as Record<string, unknown>)
+          ? String((samplingResult as Record<string, unknown>).text)
+          : JSON.stringify(samplingResult);
 
     const parsed = JSON.parse(responseText);
     return schema.parse(parsed);
