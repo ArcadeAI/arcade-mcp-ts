@@ -122,6 +122,8 @@ export async function startHttp(
     logger.info(
       "Worker routes enabled at /worker/* (ARCADE_WORKER_SECRET is set)",
     );
+  } else {
+    logger.debug("Worker routes disabled (ARCADE_WORKER_SECRET is not set)");
   }
 
   app.listen({ hostname: host, port });
