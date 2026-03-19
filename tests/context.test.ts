@@ -230,3 +230,101 @@ describe("Context facades", () => {
     expect(sendNotification).toHaveBeenCalledWith(notification);
   });
 });
+
+describe("Notification sub-facades", () => {
+  function makeCtxWithMock() {
+    const sendNotification = vi.fn().mockResolvedValue(undefined);
+    const extra = {
+      signal: new AbortController().signal,
+      requestId: "req",
+      sendNotification,
+      sendRequest: async () => ({}),
+    } as never;
+    const ctx = new Context(extra, { requestId: "req" });
+    return { ctx, sendNotification };
+  }
+
+  it("notifications.tools.listChanged() sends correct method on flush", async () => {
+    const { ctx, sendNotification } = makeCtxWithMock();
+    await ctx.notifications.tools.listChanged();
+    await ctx.notifications.flush();
+
+    expect(sendNotification).toHaveBeenCalledWith({
+      method: "notifications/tools/list_changed",
+      params: {},
+    });
+  });
+
+  it("notifications.resources.listChanged() sends correct method on flush", async () => {
+    const { ctx, sendNotification } = makeCtxWithMock();
+    await ctx.notifications.resources.listChanged();
+    await ctx.notifications.flush();
+
+    expect(sendNotification).toHaveBeenCalledWith({
+      method: "notifications/resources/list_changed",
+      params: {},
+    });
+  });
+
+  it("notifications.prompts.listChanged() sends correct method on flush", async () => {
+    const { ctx, sendNotification } = makeCtxWithMock();
+    await ctx.notifications.prompts.listChanged();
+    await ctx.notifications.flush();
+
+    expect(sendNotification).toHaveBeenCalledWith({
+      method: "notifications/prompts/list_changed",
+      params: {},
+    });
+  });
+
+  it("deduplicates repeated notifications", async () => {
+    const { ctx, sendNotification } = makeCtxWithMock();
+    await ctx.notifications.tools.listChanged();
+    await ctx.notifications.tools.listChanged();
+    await ctx.notifications.tools.listChanged();
+    await ctx.notifications.flush();
+
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("flush clears queue — second flush is a no-op", async () => {
+    const { ctx, sendNotification } = makeCtxWithMock();
+    await ctx.notifications.tools.listChanged();
+    await ctx.notifications.flush();
+    await ctx.notifications.flush();
+
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("flush sends multiple distinct notification types", async () => {
+    const { ctx, sendNotification } = makeCtxWithMock();
+    await ctx.notifications.tools.listChanged();
+    await ctx.notifications.resources.listChanged();
+    await ctx.notifications.prompts.listChanged();
+    await ctx.notifications.flush();
+
+    expect(sendNotification).toHaveBeenCalledTimes(3);
+  });
+
+  it("errors in sendNotification do not propagate from flush", async () => {
+    const sendNotification = vi.fn().mockRejectedValue(new Error("fail"));
+    const extra = {
+      signal: new AbortController().signal,
+      requestId: "req",
+      sendNotification,
+      sendRequest: async () => ({}),
+    } as never;
+    const ctx = new Context(extra, { requestId: "req" });
+
+    await ctx.notifications.tools.listChanged();
+    // Should not throw
+    await ctx.notifications.flush();
+  });
+
+  it("has sub-facade properties", () => {
+    const { ctx } = makeCtxWithMock();
+    expect(ctx.notifications.tools).toBeDefined();
+    expect(ctx.notifications.resources).toBeDefined();
+    expect(ctx.notifications.prompts).toBeDefined();
+  });
+});

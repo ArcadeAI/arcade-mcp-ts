@@ -248,6 +248,7 @@ export class ArcadeMCPServer {
 
         return (await finalHandler(mwContext)) as CallToolResult;
       } finally {
+        await context.notifications.flush();
         setCurrentContext(prevCtx);
       }
     };
