@@ -32,9 +32,9 @@ const app = new MCPApp({
 // actually return. The structuring layer handles the mapping.
 
 const EmailSummary = z.object({
-  subject: z.string(),
-  sender: z.string(),
-  snippet: z.string(),
+  subject: z.string().nullable(),
+  sender: z.string().nullable(),
+  snippet: z.string().nullable(),
 });
 
 const EmailList = z.object({
@@ -42,14 +42,14 @@ const EmailList = z.object({
 });
 
 const SlackResponse = z.object({
-  ok: z.boolean(),
-  channel: z.string(),
-  ts: z.string(),
+  ok: z.boolean().nullable(),
+  channel: z.string().nullable(),
+  ts: z.string().nullable(),
 });
 
 const ForwardedEmail = z.object({
-  sender: z.string(),
-  snippet: z.string(),
+  sender: z.string().nullable(),
+  snippet: z.string().nullable(),
   sentToSlack: z.boolean(),
 });
 
@@ -72,7 +72,7 @@ app.tool(
       channel_name: z
         .string()
         .describe("Slack channel to post emails to (e.g. '#general')"),
-      max_emails: z
+      max_emails: z.coerce
         .number()
         .int()
         .min(1)
@@ -115,7 +115,7 @@ app.tool(
     const results: z.infer<typeof ForwardedEmail>[] = [];
     for (let i = 0; i < emailData.emails.length; i++) {
       const email = emailData.emails[i];
-      const message = `*From:* ${email.sender}\n*Subject:* ${email.subject}\n> ${email.snippet}`;
+      const message = `*From:* ${email.sender ?? "unknown"}\n*Subject:* ${email.subject ?? "(no subject)"}\n> ${email.snippet ?? ""}`;
 
       log(
         "Sending email %d/%d to Slack (from: %s)...",
