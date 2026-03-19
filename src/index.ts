@@ -98,6 +98,13 @@ export {
 } from "./resource-server/index.js";
 export { JWTResourceServerValidator } from "./resource-server/jwt-validator.js";
 export { ArcadeMCPServer } from "./server.js";
+// ── Session ─────────────────────────────────────────────
+export {
+  InitializationState,
+  NotificationManager,
+  RequestManager,
+  ServerSession,
+} from "./session.js";
 // ── Settings ─────────────────────────────────────────────
 export { loadSettings, type MCPSettings } from "./settings.js";
 // ── Telemetry ────────────────────────────────────────────

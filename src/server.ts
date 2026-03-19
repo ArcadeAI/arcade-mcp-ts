@@ -18,6 +18,7 @@ import type { ResourceManager } from "./managers/resource-manager.js";
 import { applyMiddleware } from "./middleware/base.js";
 import { ErrorHandlingMiddleware } from "./middleware/error-handling.js";
 import { LoggingMiddleware } from "./middleware/logging.js";
+import { NotificationManager, type ServerSession } from "./session.js";
 import type { MCPSettings } from "./settings.js";
 import type { OTELHandler } from "./telemetry.js";
 import type {
@@ -67,6 +68,8 @@ export class ArcadeMCPServer {
   private name: string;
   private version: string;
   private arcadeClient?: Arcade;
+  private _sessionRegistry = new Map<string, ServerSession>();
+  private _notificationManager?: NotificationManager;
 
   constructor(catalog: ToolCatalog, options: ArcadeMCPServerOptions) {
     this.catalog = catalog;
@@ -192,12 +195,18 @@ export class ArcadeMCPServer {
         );
       }
 
+      // Resolve ServerSession for this request (if registered)
+      const serverSession = extra.sessionId
+        ? this._sessionRegistry.get(extra.sessionId)
+        : undefined;
+
       // Build Context
       const context = new Context(extra, {
         requestId: String(extra.requestId ?? crypto.randomUUID()),
         sessionId: extra.sessionId,
         resourceOwner: this.extractResourceOwner(extra),
         toolContext: toolCtxData,
+        serverSession,
       });
 
       // Set as current context
@@ -712,6 +721,29 @@ export class ArcadeMCPServer {
    */
   getCatalog(): ToolCatalog {
     return this.catalog;
+  }
+
+  // ── Session registry ───────────────────────────────────
+
+  registerSession(id: string, session: ServerSession): void {
+    this._sessionRegistry.set(id, session);
+  }
+
+  unregisterSession(id: string): void {
+    this._sessionRegistry.delete(id);
+  }
+
+  get sessionRegistry(): ReadonlyMap<string, ServerSession> {
+    return this._sessionRegistry;
+  }
+
+  get notificationManager(): NotificationManager {
+    if (!this._notificationManager) {
+      this._notificationManager = new NotificationManager(
+        () => this._sessionRegistry,
+      );
+    }
+    return this._notificationManager;
   }
 }
 

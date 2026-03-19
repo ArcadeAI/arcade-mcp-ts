@@ -479,6 +479,15 @@ const response = await manager.handleRequest(request, { authInfo });
 await manager.close();
 ```
 
+Each stateful HTTP session is backed by a `ServerSession` that adds:
+
+- **Initialization state tracking** — `NOT_INITIALIZED → INITIALIZING → INITIALIZED`
+- **Server-initiated requests** — `createMessage()`, `elicitInput()`, `listRoots()` with timeout and error handling
+- **Session-scoped data** — key/value storage per session via `getData()` / `setData()`
+- **Notification broadcasting** — `NotificationManager` sends tool/resource/prompt list-changed notifications to all or selected sessions
+
+The `Context` facades `context.sampling.createMessage()` and `context.ui.elicit()` automatically delegate to the `ServerSession` when available.
+
 ## Worker Routes
 
 When `ARCADE_WORKER_SECRET` is set, expose tool execution endpoints for Arcade Cloud integration:
