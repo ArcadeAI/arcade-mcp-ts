@@ -3,6 +3,7 @@ import { Elysia } from "elysia";
 import type { ToolCatalog } from "../catalog.js";
 import { toToolDefinition } from "../catalog.js";
 import { Context } from "../context.js";
+import { ServerError } from "../exceptions.js";
 import { runTool } from "../executor.js";
 import { createLogger } from "../logger.js";
 import type { OTELHandler } from "../telemetry.js";
@@ -24,6 +25,12 @@ export interface WorkerRoutesOptions {
 // biome-ignore lint/suspicious/noExplicitAny: Elysia generic prefix typing
 export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 	const secret = options.secret ?? process.env.ARCADE_WORKER_SECRET;
+	if (!secret) {
+		throw new ServerError(
+			"No secret provided for worker routes. Set the ARCADE_WORKER_SECRET environment variable.",
+		);
+	}
+
 	const basePath = options.basePath ?? "/worker";
 	const catalog = options.catalog;
 	const telemetry = options.telemetry;
@@ -33,8 +40,6 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
 
 	// Auth middleware for worker routes
 	function validateWorkerAuth(request: Request): boolean {
-		if (!secret) return true; // No auth if no secret configured
-
 		const authHeader = request.headers.get("authorization");
 		if (!authHeader?.startsWith("Bearer ")) return false;
 		return authHeader.slice(7) === secret;
