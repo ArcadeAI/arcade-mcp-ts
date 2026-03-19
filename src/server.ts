@@ -206,46 +206,35 @@ export class ArcadeMCPServer implements ToolExecutor {
       // Build tool context with secrets
       const toolCtxData = this.buildToolContext(tool);
 
-      // Determine which auth requirements to check
-      const authReqs: ToolAuthorization[] = [];
-      let isMultiProvider = false;
+      // Determine which auth requirements to check.
+      // Multi-provider tools (compound tools with resolvedAuthorizations from
+      // requestScopesFrom) don't need auth resolution here — their sub-tools
+      // handle their own auth via Arcade Cloud during context.tools.execute().
+      const isMultiProvider = (tool.resolvedAuthorizations?.length ?? 0) > 1;
 
-      if (
-        tool.resolvedAuthorizations &&
-        tool.resolvedAuthorizations.length > 0
-      ) {
-        authReqs.push(...tool.resolvedAuthorizations);
-        isMultiProvider = tool.resolvedAuthorizations.length > 1;
-      } else if (tool.auth) {
-        authReqs.push(tool.auth);
-      }
-
-      // Resolve auth tokens
-      if (authReqs.length > 0 && !toolCtxData.authToken) {
-        for (const authReq of authReqs) {
+      if (isMultiProvider) {
+        _logger.debug(
+          `Tool "${tool.fullyQualifiedName}" is multi-provider (${tool.resolvedAuthorizations!.length} providers), skipping auth resolution — sub-tools handle their own auth`,
+        );
+      } else if (tool.auth && !toolCtxData.authToken) {
+        _logger.debug(
+          `Tool "${tool.fullyQualifiedName}" requires auth (provider=${tool.auth.providerId}), resolving token...`,
+        );
+        const authResult = await this.resolveAuthToken(
+          tool.auth,
+          toolCtxData.userId,
+        );
+        if (authResult.error) {
           _logger.debug(
-            `Tool "${tool.fullyQualifiedName}" requires auth (provider=${authReq.providerId}), resolving token...`,
+            `Auth resolution for "${tool.fullyQualifiedName}" (provider=${tool.auth.providerId}) returned error to client`,
           );
-          const authResult = await this.resolveAuthToken(
-            authReq,
-            toolCtxData.userId,
-          );
-          if (authResult.error) {
-            _logger.debug(
-              `Auth resolution for "${tool.fullyQualifiedName}" (provider=${authReq.providerId}) returned error to client`,
-            );
-            return authResult.error;
-          }
-          // For single-provider tools, inject the token
-          // Multi-provider tools handle auth via Arcade Cloud in sub-tool calls
-          if (!isMultiProvider && authResult.token) {
-            _logger.debug(
-              `Auth token resolved for "${tool.fullyQualifiedName}"`,
-            );
-            toolCtxData.authToken = authResult.token;
-          }
+          return authResult.error;
         }
-      } else if (authReqs.length > 0 && toolCtxData.authToken) {
+        if (authResult.token) {
+          _logger.debug(`Auth token resolved for "${tool.fullyQualifiedName}"`);
+          toolCtxData.authToken = authResult.token;
+        }
+      } else if (tool.auth && toolCtxData.authToken) {
         _logger.debug(
           `Tool "${tool.fullyQualifiedName}" has pre-injected auth token, skipping resolution`,
         );
