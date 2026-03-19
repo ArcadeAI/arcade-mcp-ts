@@ -528,7 +528,6 @@ export class Tools extends ContextComponent {
         schema,
         toolName,
         args,
-        opts,
         maxRetries,
         retryDelaySeconds,
         onMissing,
@@ -547,7 +546,6 @@ export class Tools extends ContextComponent {
     schema: T,
     toolName: string,
     args: Record<string, unknown>,
-    opts: Required<ExecuteOptions>,
     maxRetries: number,
     retryDelaySeconds: number,
     onMissing: OnMissing,
@@ -968,9 +966,7 @@ function raiseToolError(toolName: string, rawResult: CallToolResult): never {
       structured.llm_instructions ?? structured.error ?? structured.message;
     if (candidate !== undefined) {
       errorMsg =
-        typeof candidate === "string"
-          ? candidate
-          : JSON.stringify(candidate);
+        typeof candidate === "string" ? candidate : JSON.stringify(candidate);
     }
   }
 
