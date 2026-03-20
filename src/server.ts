@@ -20,7 +20,11 @@ import { applyMiddleware } from "./middleware/base.js";
 import { ErrorHandlingMiddleware } from "./middleware/error-handling.js";
 import { LoggingMiddleware } from "./middleware/logging.js";
 import { NotificationManager, type ServerSession } from "./session.js";
-import type { MCPSettings } from "./settings.js";
+import {
+  getValidAccessToken,
+  loadArcadeCredentials,
+  type MCPSettings,
+} from "./settings.js";
 import type { OTELHandler } from "./telemetry.js";
 import type {
   CallNext,
@@ -363,16 +367,44 @@ export class ArcadeMCPServer {
 
   /**
    * Get or create the Arcade Cloud client. Returns undefined if no API key is configured.
+   * Handles token refresh for expired credentials and org/project URL rewriting
+   * for non-service keys (JWTs from `arcade login`).
    */
-  private getArcadeClient(): Arcade | undefined {
+  private async getArcadeClient(): Promise<Arcade | undefined> {
     if (this.arcadeClient) return this.arcadeClient;
-    const apiKey = this.settings?.arcade.apiKey;
+
+    const arcade = this.settings?.arcade;
+    let apiKey = arcade?.apiKey;
+
     if (!apiKey) {
       _logger.debug(
         "No Arcade API key found (checked ARCADE_API_KEY env var and ~/.arcade/credentials.yaml)",
       );
       return undefined;
     }
+
+    // For non-service keys (JWTs from credentials.yaml), check expiry and refresh
+    const isServiceKey = apiKey.startsWith("arc_");
+    if (!isServiceKey && arcade) {
+      const creds = loadArcadeCredentials();
+      const result = await getValidAccessToken({
+        apiKey,
+        refreshToken: arcade.refreshToken ?? creds.refreshToken,
+        expiresAt: arcade.expiresAt ?? creds.expiresAt,
+        coordinatorUrl: arcade.coordinatorUrl ?? creds.coordinatorUrl,
+      });
+      if (result) {
+        apiKey = result.apiKey;
+        arcade.apiKey = apiKey;
+      } else if (arcade.expiresAt || creds.expiresAt) {
+        // Token was expired and refresh failed
+        _logger.warn(
+          "Arcade access token is expired and refresh failed. Run `arcade login` to re-authenticate.",
+        );
+        return undefined;
+      }
+    }
+
     const masked =
       apiKey.length > 12
         ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`
@@ -381,12 +413,46 @@ export class ArcadeMCPServer {
       ? "ARCADE_API_KEY env var"
       : "~/.arcade/credentials.yaml";
     _logger.debug(
-      `Creating Arcade client (key: ${masked}, source: ${source}, baseURL: ${this.settings?.arcade.apiUrl})`,
+      `Creating Arcade client (key: ${masked}, source: ${source}, baseURL: ${arcade?.apiUrl})`,
     );
-    this.arcadeClient = new Arcade({
+
+    const clientOpts: ConstructorParameters<typeof Arcade>[0] = {
       apiKey,
-      baseURL: this.settings?.arcade.apiUrl,
-    });
+      baseURL: arcade?.apiUrl,
+    };
+
+    // Non-service keys need org/project URL rewriting
+    if (!isServiceKey && arcade?.orgId && arcade?.projectId) {
+      const orgId = arcade.orgId;
+      const projectId = arcade.projectId;
+      const nativeFetch = globalThis.fetch;
+      clientOpts.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+        if (typeof input === "string" || input instanceof URL) {
+          const url = new URL(input.toString());
+          if (
+            url.pathname.startsWith("/v1/") &&
+            !url.pathname.includes("/v1/orgs/")
+          ) {
+            url.pathname = url.pathname.replace(
+              "/v1/",
+              `/v1/orgs/${orgId}/projects/${projectId}/`,
+            );
+          }
+          return nativeFetch(url.toString(), init);
+        }
+        return nativeFetch(input, init);
+      };
+      _logger.info(
+        `Configured org-scoped Arcade client for org '${orgId}' project '${projectId}'`,
+      );
+    } else if (!isServiceKey) {
+      _logger.warn(
+        "Expected to find org/project context in ~/.arcade/credentials.yaml but none was found; " +
+          "using non-scoped Arcade client.",
+      );
+    }
+
+    this.arcadeClient = new Arcade(clientOpts);
     return this.arcadeClient;
   }
 
@@ -403,7 +469,7 @@ export class ArcadeMCPServer {
       return {};
     }
 
-    const client = this.getArcadeClient();
+    const client = await this.getArcadeClient();
     if (!client) {
       _logger.warn(
         "Tool requires auth but no Arcade API key is configured. " +
@@ -446,7 +512,7 @@ export class ArcadeMCPServer {
       auth_requirement: {
         provider_id: toolAuth.providerId,
         provider_type: toolAuth.providerType,
-        oauth2: toolAuth.scopes ? { scopes: toolAuth.scopes } : undefined,
+        oauth2: { scopes: toolAuth.scopes ?? [] },
       },
     };
     _logger.debug(

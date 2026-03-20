@@ -114,7 +114,12 @@ export {
   ServerSession,
 } from "./session.js";
 // ── Settings ─────────────────────────────────────────────
-export { loadSettings, type MCPSettings } from "./settings.js";
+export {
+  type ArcadeCredentials,
+  loadArcadeCredentials,
+  loadSettings,
+  type MCPSettings,
+} from "./settings.js";
 // ── Telemetry ────────────────────────────────────────────
 export { OTELHandler, type OTELHandlerOptions } from "./telemetry.js";
 export {
