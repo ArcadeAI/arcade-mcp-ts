@@ -4,6 +4,7 @@
 export * as auth from "./auth/index.js";
 export { registerAuthDiscoveryRoutes } from "./auth/routes.js";
 export type { AuthProviderType, ToolAuthorization } from "./auth/types.js";
+export { ArcadeAuthResolver } from "./auth-resolution.js";
 export { normalizeVersion, ToolCatalog, toToolDefinition } from "./catalog.js";
 // ── CLI / Discovery ─────────────────────────────────────
 export {
@@ -23,6 +24,11 @@ export {
   createMcpToolConfig,
   type McpToolConfig,
 } from "./convert.js";
+// ── Credentials ─────────────────────────────────────────
+export {
+  type ArcadeCredentials,
+  loadArcadeCredentials,
+} from "./credentials.js";
 // ── Errors ───────────────────────────────────────────────
 export {
   ContextRequiredToolError,
@@ -114,12 +120,7 @@ export {
   ServerSession,
 } from "./session.js";
 // ── Settings ─────────────────────────────────────────────
-export {
-  type ArcadeCredentials,
-  loadArcadeCredentials,
-  loadSettings,
-  type MCPSettings,
-} from "./settings.js";
+export { loadSettings, type MCPSettings } from "./settings.js";
 // ── Telemetry ────────────────────────────────────────────
 export { OTELHandler, type OTELHandlerOptions } from "./telemetry.js";
 export {

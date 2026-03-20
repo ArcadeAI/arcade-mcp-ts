@@ -53,11 +53,8 @@ export interface ToolContextData {
 export class Context {
   readonly log: Logs;
   readonly progress: Progress;
-  readonly resources: Resources;
-  readonly tools: Tools;
   readonly sampling: Sampling;
   readonly ui: UI;
-  readonly prompts: Prompts;
   readonly notifications: Notifications;
 
   private _extra: ServerExtra;
@@ -90,11 +87,8 @@ export class Context {
     // Initialize facades
     this.log = new Logs(this);
     this.progress = new Progress(this);
-    this.resources = new Resources(this);
-    this.tools = new Tools(this);
     this.sampling = new Sampling(this);
     this.ui = new UI(this);
-    this.prompts = new Prompts(this);
     this.notifications = new Notifications(this);
   }
 
@@ -168,14 +162,6 @@ export class Context {
   getToolContext(): ToolContextData {
     return { ...this._toolContext };
   }
-
-  /**
-   * Send a notification via the MCP session.
-   * @deprecated Use context.notifications.send() instead.
-   */
-  async sendNotification(notification: ServerNotification): Promise<void> {
-    await this.notifications.send(notification);
-  }
 }
 
 /**
@@ -232,37 +218,6 @@ export class Progress extends ContextComponent {
 }
 
 /**
- * Resource access facade: context.resources.read(), .list()
- */
-export class Resources extends ContextComponent {
-  async read(_uri: string): Promise<unknown> {
-    // Delegate to server's resource handler via extra
-    return undefined;
-  }
-
-  async list(): Promise<unknown[]> {
-    return [];
-  }
-}
-
-/**
- * Tool calling facade: context.tools.call(), .list()
- */
-export class Tools extends ContextComponent {
-  async call(
-    _name: string,
-    _params?: Record<string, unknown>,
-  ): Promise<unknown> {
-    // Delegate to server's tool executor
-    return undefined;
-  }
-
-  async list(): Promise<unknown[]> {
-    return [];
-  }
-}
-
-/**
  * Sampling facade: context.sampling.createMessage()
  */
 export class Sampling extends ContextComponent {
@@ -304,23 +259,6 @@ export class UI extends ContextComponent {
       } as never);
     }
     return undefined;
-  }
-}
-
-/**
- * Prompts facade: context.prompts.get(), .list()
- */
-export class Prompts extends ContextComponent {
-  async get(
-    _name: string,
-    _arguments?: Record<string, string>,
-  ): Promise<unknown> {
-    // Delegate to server's prompt handler via extra
-    return undefined;
-  }
-
-  async list(): Promise<unknown[]> {
-    return [];
   }
 }
 
