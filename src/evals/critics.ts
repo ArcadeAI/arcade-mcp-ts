@@ -1,3 +1,4 @@
+import { ServerError } from "../exceptions.js";
 import type { CriticResult } from "./types.js";
 
 /**
@@ -12,7 +13,7 @@ export abstract class Critic {
 
   constructor(options: { field: string; weight: number }) {
     if (options.weight < 0) {
-      throw new Error(
+      throw new ServerError(
         `Critic weight must be non-negative, got ${options.weight}`,
       );
     }
@@ -69,7 +70,7 @@ export class NumericCritic extends Critic {
     this.matchThreshold = options.matchThreshold ?? 0.8;
 
     if (this.valueRange[0] >= this.valueRange[1]) {
-      throw new Error(
+      throw new ServerError(
         `valueRange min (${this.valueRange[0]}) must be less than max (${this.valueRange[1]})`,
       );
     }

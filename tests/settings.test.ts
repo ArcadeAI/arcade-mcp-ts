@@ -54,6 +54,26 @@ describe("loadSettings", () => {
     expect(settings.toolSecrets._INTERNAL).toBeUndefined();
   });
 
+  it("excludes system env vars from secrets", () => {
+    process.env.PATH = "/usr/bin";
+    process.env.HOME = "/home/test";
+    process.env.USER = "testuser";
+    process.env.SHELL = "/bin/bash";
+    process.env.NODE_ENV = "test";
+
+    const settings = loadSettings();
+    expect(settings.toolSecrets.PATH).toBeUndefined();
+    expect(settings.toolSecrets.HOME).toBeUndefined();
+    expect(settings.toolSecrets.USER).toBeUndefined();
+    expect(settings.toolSecrets.SHELL).toBeUndefined();
+    expect(settings.toolSecrets.NODE_ENV).toBeUndefined();
+  });
+
+  it("defaults maskErrorDetails to true", () => {
+    const settings = loadSettings();
+    expect(settings.middleware.maskErrorDetails).toBe(true);
+  });
+
   it("parses authorization servers from JSON", () => {
     process.env.MCP_RESOURCE_SERVER_AUTHORIZATION_SERVERS = JSON.stringify([
       {

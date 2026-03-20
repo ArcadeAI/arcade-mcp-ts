@@ -443,11 +443,9 @@ export class ArcadeMCPServer {
   private selectUserId(): string | undefined {
     const userId = this.settings?.arcade.userId ?? process.env.ARCADE_USER_ID;
     if (userId) {
-      const source = this.settings?.arcade.userId
-        ? process.env.ARCADE_USER_ID
-          ? "ARCADE_USER_ID env var"
-          : "~/.arcade/credentials.yaml"
-        : "ARCADE_USER_ID env var";
+      const source = process.env.ARCADE_USER_ID
+        ? "ARCADE_USER_ID env var"
+        : "~/.arcade/credentials.yaml";
       _logger.debug(`Resolved userId: ${userId} (source: ${source})`);
     } else {
       _logger.debug(

@@ -52,6 +52,7 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) return false;
     const token = authHeader.slice(7);
+    if (!token) return false;
     try {
       const { payload } = await jose.jwtVerify(token, secretKey, {
         algorithms: ["HS256"],

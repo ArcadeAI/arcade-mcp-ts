@@ -1,4 +1,5 @@
 import * as jose from "jose";
+import { AuthorizationError } from "../exceptions.js";
 import { createLogger } from "../logger.js";
 import type { ResourceOwner } from "../types.js";
 import type {
@@ -57,7 +58,7 @@ export class JWTResourceServerValidator extends ResourceServerValidator {
 
     for (const entry of options.authorizationServers) {
       if (!SUPPORTED_ALGORITHMS.has(entry.algorithm ?? "RS256")) {
-        throw new Error(
+        throw new AuthorizationError(
           `Unsupported algorithm: ${entry.algorithm}. Supported: ${[...SUPPORTED_ALGORITHMS].join(", ")}`,
         );
       }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolHandler, ToolOptions } from "../../../src/index.js";
+import { ToolExecutionError } from "../../../src/index.js";
 
 const addSchema = z.object({
   a: z.coerce.number().describe("First number"),
@@ -42,7 +43,7 @@ export const mathTools: Record<
     },
     handler: async (args: z.infer<typeof divideSchema>) => {
       if (args.denominator === 0) {
-        throw new Error("Division by zero");
+        throw new ToolExecutionError("Division by zero");
       }
       return { result: args.numerator / args.denominator };
     },

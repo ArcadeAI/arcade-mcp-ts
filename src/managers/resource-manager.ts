@@ -1,4 +1,5 @@
 import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
+import { NotFoundError } from "../exceptions.js";
 import type { ResourceHandler, ResourceOptions } from "../types.js";
 import { ComponentRegistry } from "./base.js";
 
@@ -50,7 +51,7 @@ export class ResourceManager {
   async readResource(uri: string): Promise<ReadResourceResult> {
     const stored = this.registry.get(uri);
     if (!stored) {
-      throw new Error(`Resource '${uri}' not found`);
+      throw new NotFoundError(`Resource '${uri}' not found`);
     }
     return stored.handler(new URL(uri));
   }

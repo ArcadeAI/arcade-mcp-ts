@@ -59,7 +59,7 @@ export class MCPApp {
 
   constructor(options: MCPAppOptions) {
     if (!NAME_REGEX.test(options.name)) {
-      throw new Error(
+      throw new ServerError(
         `Invalid app name '${options.name}': must be alphanumeric with underscores, start with a letter, no consecutive underscores`,
       );
     }
@@ -176,7 +176,11 @@ export class MCPApp {
       this._telemetry.initialize();
 
       const shutdownTelemetry = async () => {
-        await this._telemetry?.shutdown();
+        try {
+          await this._telemetry?.shutdown();
+        } catch {
+          /* best-effort cleanup */
+        }
       };
       process.on("SIGINT", shutdownTelemetry);
       process.on("SIGTERM", shutdownTelemetry);
@@ -194,7 +198,11 @@ export class MCPApp {
     });
 
     const shutdownTracker = async () => {
-      await this._tracker?.shutdown();
+      try {
+        await this._tracker?.shutdown();
+      } catch {
+        /* best-effort cleanup */
+      }
     };
     process.on("SIGINT", shutdownTracker);
     process.on("SIGTERM", shutdownTracker);

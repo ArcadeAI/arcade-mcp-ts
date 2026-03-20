@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NotFoundError } from "../../src/exceptions.js";
 import { ResourceManager } from "../../src/managers/resource-manager.js";
 
 describe("ResourceManager", () => {
@@ -62,8 +63,11 @@ describe("ResourceManager", () => {
     });
   });
 
-  it("throws when reading non-existent resource", async () => {
+  it("throws NotFoundError when reading non-existent resource", async () => {
     const rm = new ResourceManager();
+    await expect(rm.readResource("file:///missing")).rejects.toThrow(
+      NotFoundError,
+    );
     await expect(rm.readResource("file:///missing")).rejects.toThrow(
       "Resource 'file:///missing' not found",
     );

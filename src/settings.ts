@@ -99,13 +99,47 @@ function envBool(key: string, defaultValue: boolean): boolean {
 /**
  * Collect all env vars that don't start with MCP_ or _ as tool secrets.
  */
+/** Env vars that are never tool secrets (system/shell variables). */
+const SECRET_BLOCKLIST = new Set([
+  "PATH",
+  "HOME",
+  "USER",
+  "SHELL",
+  "TERM",
+  "LANG",
+  "LOGNAME",
+  "HOSTNAME",
+  "TMPDIR",
+  "PWD",
+  "OLDPWD",
+  "EDITOR",
+  "VISUAL",
+  "PAGER",
+  "SHLVL",
+  "COLORTERM",
+  "TERM_PROGRAM",
+  "TERM_PROGRAM_VERSION",
+  "NODE_OPTIONS",
+  "NODE_ENV",
+  "NODE_PATH",
+  "NODE_EXTRA_CA_CERTS",
+  "npm_config_prefix",
+  "npm_config_cache",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_STATE_HOME",
+  "XDG_RUNTIME_DIR",
+]);
+
 function collectToolSecrets(): Record<string, string> {
   const secrets: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (
       value !== undefined &&
       !key.startsWith("MCP_") &&
-      !key.startsWith("_")
+      !key.startsWith("_") &&
+      !SECRET_BLOCKLIST.has(key)
     ) {
       secrets[key] = value;
     }
@@ -174,7 +208,7 @@ export function loadSettings(): MCPSettings {
         "MCP_MIDDLEWARE_ENABLE_ERROR_HANDLING",
         true,
       ),
-      maskErrorDetails: envBool("MCP_MIDDLEWARE_MASK_ERROR_DETAILS", false),
+      maskErrorDetails: envBool("MCP_MIDDLEWARE_MASK_ERROR_DETAILS", true),
     },
     telemetry: {
       enable: envBool("ARCADE_MCP_OTEL_ENABLE", false),
