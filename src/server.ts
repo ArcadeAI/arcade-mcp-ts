@@ -1,9 +1,8 @@
-import Arcade from "@arcadeai/arcadejs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { SpanStatusCode } from "@opentelemetry/api";
 import { z } from "zod";
-import type { ToolAuthorization } from "./auth/types.js";
+import { ArcadeAuthResolver } from "./auth-resolution.js";
 import type { ToolCatalog } from "./catalog.js";
 import {
   Context,
@@ -20,11 +19,7 @@ import { applyMiddleware } from "./middleware/base.js";
 import { ErrorHandlingMiddleware } from "./middleware/error-handling.js";
 import { LoggingMiddleware } from "./middleware/logging.js";
 import { NotificationManager, type ServerSession } from "./session.js";
-import {
-  getValidAccessToken,
-  loadArcadeCredentials,
-  type MCPSettings,
-} from "./settings.js";
+import type { MCPSettings } from "./settings.js";
 import type { OTELHandler } from "./telemetry.js";
 import type {
   CallNext,
@@ -72,7 +67,7 @@ export class ArcadeMCPServer {
   private resourceManager?: ResourceManager;
   private name: string;
   private version: string;
-  private arcadeClient?: Arcade;
+  private authResolver: ArcadeAuthResolver;
   private _sessionRegistry = new Map<string, ServerSession>();
   private _notificationManager?: NotificationManager;
 
@@ -86,6 +81,7 @@ export class ArcadeMCPServer {
     this.tracker = options.tracker;
     this.promptManager = options.promptManager;
     this.resourceManager = options.resourceManager;
+    this.authResolver = new ArcadeAuthResolver(options.settings?.arcade);
 
     // Build middleware chain
     this.middlewareChain = [];
@@ -122,6 +118,8 @@ export class ArcadeMCPServer {
     );
   }
 
+  // ── Catalog registration ────────────────────────────────
+
   /**
    * Register all tools from the catalog with the underlying McpServer.
    */
@@ -132,9 +130,32 @@ export class ArcadeMCPServer {
   }
 
   /**
-   * Register a single tool on the given McpServer target, wrapping the handler
-   * to inject Context and apply middleware.
+   * Register all prompts from the prompt manager with the underlying McpServer.
    */
+  registerCatalogPrompts(): void {
+    if (!this.promptManager) return;
+    for (const prompt of this.promptManager.listPrompts()) {
+      this.registerPromptOn(this.mcpServer, prompt.name, prompt);
+    }
+  }
+
+  /**
+   * Register all resources from the resource manager with the underlying McpServer.
+   */
+  registerCatalogResources(): void {
+    if (!this.resourceManager) return;
+    for (const resource of this.resourceManager.listResources()) {
+      this.registerResourceOn(
+        this.mcpServer,
+        resource.uri,
+        resource.name,
+        resource,
+      );
+    }
+  }
+
+  // ── Single-item registration on a target McpServer ──────
+
   private registerToolOn(target: McpServer, tool: MaterializedTool): void {
     const config = createMcpToolConfig(tool);
     target.registerTool(
@@ -152,6 +173,112 @@ export class ArcadeMCPServer {
     );
   }
 
+  private registerPromptOn(
+    target: McpServer,
+    name: string,
+    stored: {
+      description?: string;
+      arguments?: Array<{
+        name: string;
+        description?: string;
+        required?: boolean;
+      }>;
+    },
+  ): void {
+    const argsSchema: Record<string, z.ZodType> = {};
+    if (stored.arguments) {
+      for (const arg of stored.arguments) {
+        const base = arg.description
+          ? z.string().describe(arg.description)
+          : z.string();
+        argsSchema[arg.name] = arg.required ? base : base.optional();
+      }
+    }
+
+    const config: Record<string, unknown> = {
+      description: stored.description,
+    };
+    if (Object.keys(argsSchema).length > 0) {
+      config.argsSchema = argsSchema;
+    }
+
+    target.registerPrompt(
+      name,
+      config as never,
+      (async (args: Record<string, string>) => {
+        return this.promptManager!.getPrompt(name, args);
+      }) as never,
+    );
+  }
+
+  private registerResourceOn(
+    target: McpServer,
+    uri: string,
+    name: string,
+    stored: { description?: string; mimeType?: string },
+  ): void {
+    target.registerResource(
+      name,
+      uri,
+      { description: stored.description, mimeType: stored.mimeType } as never,
+      (async (resourceUri: URL) => {
+        return this.resourceManager!.readResource(resourceUri.href);
+      }) as never,
+    );
+  }
+
+  /**
+   * Register all tools, prompts, and resources on a target McpServer.
+   */
+  private registerAllOn(target: McpServer): void {
+    for (const tool of this.catalog.getAll()) {
+      this.registerToolOn(target, tool);
+    }
+
+    if (this.promptManager) {
+      for (const prompt of this.promptManager.listPrompts()) {
+        this.registerPromptOn(target, prompt.name, prompt);
+      }
+    }
+
+    if (this.resourceManager) {
+      for (const resource of this.resourceManager.listResources()) {
+        this.registerResourceOn(target, resource.uri, resource.name, resource);
+      }
+    }
+  }
+
+  // ── Runtime additions ───────────────────────────────────
+
+  addTool(tool: MaterializedTool): void {
+    this.registerToolOn(this.mcpServer, tool);
+  }
+
+  addPrompt(
+    name: string,
+    options: PromptOptions,
+    _handler?: PromptHandler,
+  ): void {
+    this.registerPromptOn(this.mcpServer, name, {
+      description: options.description,
+      arguments: options.arguments,
+    });
+  }
+
+  addResource(
+    uri: string,
+    name: string,
+    options: ResourceOptions,
+    _handler?: ResourceHandler,
+  ): void {
+    this.registerResourceOn(this.mcpServer, uri, name, {
+      description: options.description,
+      mimeType: options.mimeType,
+    });
+  }
+
+  // ── Tool execution pipeline ─────────────────────────────
+
   /**
    * Execute a tool with context injection, secret management, and middleware.
    */
@@ -167,7 +294,6 @@ export class ArcadeMCPServer {
       environment,
     };
 
-    // Increment tool_call counter
     this.telemetry?.toolCallCounter?.add(1, spanAttributes);
 
     const tracer = this.telemetry?.enabled
@@ -175,16 +301,14 @@ export class ArcadeMCPServer {
       : undefined;
 
     const executeInner = async (): Promise<CallToolResult> => {
-      // Build tool context with secrets
       const toolCtxData = this.buildToolContext(tool);
 
-      // Resolve auth token from Arcade Cloud for tools with auth requirements.
-      // Skipped when a token is already present (e.g. injected by worker routes).
+      // Resolve auth token if needed
       if (tool.auth && !toolCtxData.authToken) {
         _logger.debug(
           `Tool "${tool.fullyQualifiedName}" requires auth (provider=${tool.auth.providerId}), resolving token...`,
         );
-        const authResult = await this.resolveAuthToken(
+        const authResult = await this.authResolver.resolveAuthToken(
           tool.auth,
           toolCtxData.userId,
         );
@@ -204,12 +328,10 @@ export class ArcadeMCPServer {
         );
       }
 
-      // Resolve ServerSession for this request (if registered)
       const serverSession = extra.sessionId
         ? this._sessionRegistry.get(extra.sessionId)
         : undefined;
 
-      // Build Context
       const context = new Context(extra, {
         requestId: String(extra.requestId ?? crypto.randomUUID()),
         sessionId: extra.sessionId,
@@ -218,11 +340,9 @@ export class ArcadeMCPServer {
         serverSession,
       });
 
-      // Set as current context
       const prevCtx = setCurrentContext(context);
 
       try {
-        // Build middleware context
         const mwContext: MiddlewareContext = {
           method: "tools/call",
           params: { name: tool.fullyQualifiedName, arguments: args },
@@ -234,15 +354,11 @@ export class ArcadeMCPServer {
           metadata: {},
         };
 
-        // The final handler that actually runs the tool
         const finalHandler: CallNext = async () => {
           const result = await runTool(tool, args, context);
-
           if (result.success) {
             return toCallToolResult(result.value);
           }
-
-          // Tool execution failed
           return {
             content: [
               {
@@ -254,14 +370,12 @@ export class ArcadeMCPServer {
           };
         };
 
-        // Apply middleware chain
         if (this.middlewareChain.length > 0) {
           const wrappedHandler = applyMiddleware(
             this.middlewareChain as never[],
             finalHandler,
           );
-          const result = await wrappedHandler(mwContext);
-          return result as CallToolResult;
+          return (await wrappedHandler(mwContext)) as CallToolResult;
         }
 
         return (await finalHandler(mwContext)) as CallToolResult;
@@ -304,9 +418,8 @@ export class ArcadeMCPServer {
     });
   }
 
-  /**
-   * Build ToolContextData for a tool, injecting secrets from env/settings.
-   */
+  // ── Helpers ─────────────────────────────────────────────
+
   private buildToolContext(tool: MaterializedTool): ToolContextData {
     const secrets: Record<string, string> = {};
 
@@ -327,9 +440,6 @@ export class ArcadeMCPServer {
     };
   }
 
-  /**
-   * Select user ID with priority: resource owner > settings > env > session.
-   */
   private selectUserId(): string | undefined {
     const userId = this.settings?.arcade.userId ?? process.env.ARCADE_USER_ID;
     if (userId) {
@@ -347,14 +457,10 @@ export class ArcadeMCPServer {
     return userId;
   }
 
-  /**
-   * Extract ResourceOwner from the request extra (set by auth middleware).
-   */
   private extractResourceOwner(extra: ServerExtra): ResourceOwner | undefined {
     const authInfo = extra.authInfo;
     if (!authInfo) return undefined;
 
-    // authInfo may contain resource owner data set by our HTTP middleware
     if (
       typeof authInfo === "object" &&
       "userId" in (authInfo as Record<string, unknown>)
@@ -365,363 +471,15 @@ export class ArcadeMCPServer {
     return undefined;
   }
 
-  /**
-   * Get or create the Arcade Cloud client. Returns undefined if no API key is configured.
-   * Handles token refresh for expired credentials and org/project URL rewriting
-   * for non-service keys (JWTs from `arcade login`).
-   */
-  private async getArcadeClient(): Promise<Arcade | undefined> {
-    if (this.arcadeClient) return this.arcadeClient;
+  // ── Server access ───────────────────────────────────────
 
-    const arcade = this.settings?.arcade;
-    let apiKey = arcade?.apiKey;
-
-    if (!apiKey) {
-      _logger.debug(
-        "No Arcade API key found (checked ARCADE_API_KEY env var and ~/.arcade/credentials.yaml)",
-      );
-      return undefined;
-    }
-
-    // For non-service keys (JWTs from credentials.yaml), check expiry and refresh
-    const isServiceKey = apiKey.startsWith("arc_");
-    if (!isServiceKey && arcade) {
-      const creds = loadArcadeCredentials();
-      const result = await getValidAccessToken({
-        apiKey,
-        refreshToken: arcade.refreshToken ?? creds.refreshToken,
-        expiresAt: arcade.expiresAt ?? creds.expiresAt,
-        coordinatorUrl: arcade.coordinatorUrl ?? creds.coordinatorUrl,
-      });
-      if (result) {
-        apiKey = result.apiKey;
-        arcade.apiKey = apiKey;
-      } else if (arcade.expiresAt || creds.expiresAt) {
-        // Token was expired and refresh failed
-        _logger.warn(
-          "Arcade access token is expired and refresh failed. Run `arcade login` to re-authenticate.",
-        );
-        return undefined;
-      }
-    }
-
-    const masked =
-      apiKey.length > 12
-        ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`
-        : "***";
-    const source = process.env.ARCADE_API_KEY
-      ? "ARCADE_API_KEY env var"
-      : "~/.arcade/credentials.yaml";
-    _logger.debug(
-      `Creating Arcade client (key: ${masked}, source: ${source}, baseURL: ${arcade?.apiUrl})`,
-    );
-
-    const clientOpts: ConstructorParameters<typeof Arcade>[0] = {
-      apiKey,
-      baseURL: arcade?.apiUrl,
-    };
-
-    // Non-service keys need org/project URL rewriting
-    if (!isServiceKey && arcade?.orgId && arcade?.projectId) {
-      const orgId = arcade.orgId;
-      const projectId = arcade.projectId;
-      const nativeFetch = globalThis.fetch;
-      clientOpts.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-        if (typeof input === "string" || input instanceof URL) {
-          const url = new URL(input.toString());
-          if (
-            url.pathname.startsWith("/v1/") &&
-            !url.pathname.includes("/v1/orgs/")
-          ) {
-            url.pathname = url.pathname.replace(
-              "/v1/",
-              `/v1/orgs/${orgId}/projects/${projectId}/`,
-            );
-          }
-          return nativeFetch(url.toString(), init);
-        }
-        return nativeFetch(input, init);
-      };
-      _logger.info(
-        `Configured org-scoped Arcade client for org '${orgId}' project '${projectId}'`,
-      );
-    } else if (!isServiceKey) {
-      _logger.warn(
-        "Expected to find org/project context in ~/.arcade/credentials.yaml but none was found; " +
-          "using non-scoped Arcade client.",
-      );
-    }
-
-    this.arcadeClient = new Arcade(clientOpts);
-    return this.arcadeClient;
-  }
-
-  /**
-   * Resolve an auth token from Arcade Cloud for a tool with an auth requirement.
-   * Returns the token on success, or a CallToolResult error to return to the client.
-   */
-  private async resolveAuthToken(
-    toolAuth: ToolAuthorization,
-    userId: string | undefined,
-  ): Promise<{ token?: string; error?: CallToolResult }> {
-    if (this.settings?.arcade.authDisabled) {
-      _logger.debug("Auth resolution skipped: ARCADE_AUTH_DISABLED is set");
-      return {};
-    }
-
-    const client = await this.getArcadeClient();
-    if (!client) {
-      _logger.warn(
-        "Tool requires auth but no Arcade API key is configured. " +
-          "Set ARCADE_API_KEY env var or ensure ~/.arcade/credentials.yaml has a valid access_token.",
-      );
-      return {
-        error: {
-          content: [
-            {
-              type: "text" as const,
-              text:
-                "Tool requires authentication but no Arcade API key is configured. " +
-                "Set the ARCADE_API_KEY environment variable or run `arcade login`.",
-            },
-          ],
-          isError: true,
-        },
-      };
-    }
-
-    if (!userId) {
-      _logger.warn("Tool requires auth but no userId is available");
-      return {
-        error: {
-          content: [
-            {
-              type: "text" as const,
-              text:
-                "This tool requires authentication but no user ID is available. " +
-                "Set the ARCADE_USER_ID environment variable or run `arcade login`.",
-            },
-          ],
-          isError: true,
-        },
-      };
-    }
-
-    const authRequest = {
-      user_id: userId,
-      auth_requirement: {
-        provider_id: toolAuth.providerId,
-        provider_type: toolAuth.providerType,
-        oauth2: { scopes: toolAuth.scopes ?? [] },
-      },
-    };
-    _logger.debug(
-      `Requesting auth token from Arcade Cloud: provider=${toolAuth.providerId}, type=${toolAuth.providerType}, userId=${userId}, scopes=${toolAuth.scopes?.join(",") ?? "none"}`,
-    );
-
-    let response: Awaited<ReturnType<typeof client.auth.authorize>>;
-    try {
-      response = await client.auth.authorize(authRequest);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const status = (err as { status?: number }).status;
-      _logger.error(
-        `Arcade Cloud auth request failed: ${message}${status ? ` (HTTP ${status})` : ""}`,
-      );
-      return {
-        error: {
-          content: [
-            {
-              type: "text" as const,
-              text:
-                `Arcade Cloud auth request failed${status ? ` (HTTP ${status})` : ""}: ${message}\n\n` +
-                "Check that ARCADE_API_KEY is valid and not expired. " +
-                "If using ~/.arcade/credentials.yaml, the access_token may need refreshing via `arcade login`.",
-            },
-          ],
-          isError: true,
-        },
-      };
-    }
-
-    _logger.debug(
-      `Arcade Cloud auth response: status=${response.status}, hasToken=${!!response.context?.token}, hasUrl=${!!response.url}`,
-    );
-
-    if (response.status === "completed") {
-      return { token: response.context?.token ?? undefined };
-    }
-
-    if (response.status === "pending" || response.status === "not_started") {
-      const message = response.url
-        ? `Authorization required. Please visit the following URL to authorize, then retry:\n\n${response.url}`
-        : "Authorization is pending. Please complete the authorization flow, then retry.";
-      return {
-        error: {
-          content: [{ type: "text" as const, text: message }],
-          isError: true,
-        },
-      };
-    }
-
-    // status === "failed" or unknown
-    _logger.warn(
-      `Authorization failed for provider "${toolAuth.providerId}": status=${response.status}`,
-    );
-    return {
-      error: {
-        content: [
-          {
-            type: "text" as const,
-            text: `Authorization failed for provider "${toolAuth.providerId}" (status: ${response.status}). Please try again.`,
-          },
-        ],
-        isError: true,
-      },
-    };
-  }
-
-  // ── Runtime tool management ──────────────────────────────
-
-  /**
-   * Add a tool at runtime.
-   */
-  addTool(tool: MaterializedTool): void {
-    this.registerToolOn(this.mcpServer, tool);
-  }
-
-  // ── Prompt registration ──────────────────────────────────
-
-  /**
-   * Register all prompts from the prompt manager with the underlying McpServer.
-   */
-  registerCatalogPrompts(): void {
-    if (!this.promptManager) return;
-    for (const prompt of this.promptManager.listPrompts()) {
-      this.registerPromptOn(this.mcpServer, prompt.name, prompt);
-    }
-  }
-
-  /**
-   * Register a single prompt on the given McpServer target.
-   */
-  private registerPromptOn(
-    target: McpServer,
-    name: string,
-    stored: {
-      description?: string;
-      arguments?: Array<{
-        name: string;
-        description?: string;
-        required?: boolean;
-      }>;
-    },
-  ): void {
-    // Build Zod shape for argsSchema (SDK requires Zod types, not plain objects)
-    const argsSchema: Record<string, z.ZodType> = {};
-    if (stored.arguments) {
-      for (const arg of stored.arguments) {
-        const base = arg.description
-          ? z.string().describe(arg.description)
-          : z.string();
-        argsSchema[arg.name] = arg.required ? base : base.optional();
-      }
-    }
-
-    const config: Record<string, unknown> = {
-      description: stored.description,
-    };
-    if (Object.keys(argsSchema).length > 0) {
-      config.argsSchema = argsSchema;
-    }
-
-    target.registerPrompt(
-      name,
-      config as never,
-      (async (args: Record<string, string>) => {
-        return this.promptManager!.getPrompt(name, args);
-      }) as never,
-    );
-  }
-
-  /**
-   * Add a prompt at runtime.
-   */
-  addPrompt(
-    name: string,
-    options: PromptOptions,
-    _handler?: PromptHandler,
-  ): void {
-    this.registerPromptOn(this.mcpServer, name, {
-      description: options.description,
-      arguments: options.arguments,
-    });
-  }
-
-  // ── Resource registration ────────────────────────────────
-
-  /**
-   * Register all resources from the resource manager with the underlying McpServer.
-   */
-  registerCatalogResources(): void {
-    if (!this.resourceManager) return;
-    for (const resource of this.resourceManager.listResources()) {
-      this.registerResourceOn(
-        this.mcpServer,
-        resource.uri,
-        resource.name,
-        resource,
-      );
-    }
-  }
-
-  /**
-   * Register a single resource on the given McpServer target.
-   */
-  private registerResourceOn(
-    target: McpServer,
-    uri: string,
-    name: string,
-    stored: { description?: string; mimeType?: string },
-  ): void {
-    target.registerResource(
-      name,
-      uri,
-      { description: stored.description, mimeType: stored.mimeType } as never,
-      (async (resourceUri: URL) => {
-        return this.resourceManager!.readResource(resourceUri.href);
-      }) as never,
-    );
-  }
-
-  /**
-   * Add a resource at runtime.
-   */
-  addResource(
-    uri: string,
-    name: string,
-    options: ResourceOptions,
-    _handler?: ResourceHandler,
-  ): void {
-    this.registerResourceOn(this.mcpServer, uri, name, {
-      description: options.description,
-      mimeType: options.mimeType,
-    });
-  }
-
-  /**
-   * Get the underlying McpServer for transport connection.
-   * Suitable for single-session transports (e.g. stdio).
-   */
   getServer(): McpServer {
     return this.mcpServer;
   }
 
   /**
    * Create a fresh McpServer instance with all registered tools, prompts,
-   * and resources. Each call returns an independent Protocol chain, so
-   * multiple HTTP sessions can run concurrently without hitting the SDK's
-   * "Already connected to a transport" guard.
+   * and resources for a new HTTP session.
    */
   createSessionServer(): McpServer {
     const session = new McpServer(
@@ -736,28 +494,10 @@ export class ArcadeMCPServer {
       },
     );
 
-    for (const tool of this.catalog.getAll()) {
-      this.registerToolOn(session, tool);
-    }
-
-    if (this.promptManager) {
-      for (const prompt of this.promptManager.listPrompts()) {
-        this.registerPromptOn(session, prompt.name, prompt);
-      }
-    }
-
-    if (this.resourceManager) {
-      for (const resource of this.resourceManager.listResources()) {
-        this.registerResourceOn(session, resource.uri, resource.name, resource);
-      }
-    }
-
+    this.registerAllOn(session);
     return session;
   }
 
-  /**
-   * Get the catalog.
-   */
   getCatalog(): ToolCatalog {
     return this.catalog;
   }
@@ -790,7 +530,6 @@ export class ArcadeMCPServer {
  * Convert a tool handler result to MCP CallToolResult format.
  */
 function toCallToolResult(value: unknown): CallToolResult {
-  // Already a CallToolResult
   if (
     value !== null &&
     typeof value === "object" &&
@@ -799,14 +538,12 @@ function toCallToolResult(value: unknown): CallToolResult {
     return value as CallToolResult;
   }
 
-  // String -> text content
   if (typeof value === "string") {
     return {
       content: [{ type: "text", text: value }],
     };
   }
 
-  // Object/Array -> JSON text content
   if (value !== null && value !== undefined) {
     return {
       content: [
@@ -818,7 +555,6 @@ function toCallToolResult(value: unknown): CallToolResult {
     };
   }
 
-  // Null/undefined
   return {
     content: [{ type: "text", text: "" }],
   };

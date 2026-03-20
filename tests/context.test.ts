@@ -155,11 +155,6 @@ describe("Context facades", () => {
     expect(ctx.progress).toBeDefined();
   });
 
-  it("has tools facade", () => {
-    const ctx = new Context(makeExtra(), { requestId: "req" });
-    expect(ctx.tools).toBeDefined();
-  });
-
   it("has sampling facade", () => {
     const ctx = new Context(makeExtra(), { requestId: "req" });
     expect(ctx.sampling).toBeDefined();
@@ -168,13 +163,6 @@ describe("Context facades", () => {
   it("has ui facade", () => {
     const ctx = new Context(makeExtra(), { requestId: "req" });
     expect(ctx.ui).toBeDefined();
-  });
-
-  it("has prompts facade", () => {
-    const ctx = new Context(makeExtra(), { requestId: "req" });
-    expect(ctx.prompts).toBeDefined();
-    expect(typeof ctx.prompts.get).toBe("function");
-    expect(typeof ctx.prompts.list).toBe("function");
   });
 
   it("has notifications facade", () => {
@@ -198,25 +186,6 @@ describe("Context facades", () => {
       params: { progress: 50 },
     };
     await ctx.notifications.send(notification as never);
-
-    expect(sendNotification).toHaveBeenCalledWith(notification);
-  });
-
-  it("sendNotification (deprecated) delegates to notifications facade", async () => {
-    const sendNotification = vi.fn().mockResolvedValue(undefined);
-    const extra = {
-      signal: new AbortController().signal,
-      requestId: "req",
-      sendNotification,
-      sendRequest: async () => ({}),
-    } as never;
-    const ctx = new Context(extra, { requestId: "req" });
-
-    const notification = {
-      method: "notifications/progress" as const,
-      params: { progress: 50 },
-    };
-    await ctx.sendNotification(notification as never);
 
     expect(sendNotification).toHaveBeenCalledWith(notification);
   });

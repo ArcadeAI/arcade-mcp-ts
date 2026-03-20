@@ -9,6 +9,7 @@ import {
   type ToolkitInfo,
   type ToolOptions,
 } from "./types.js";
+import { getZodDef, getZodShape, isOptionalSchema } from "./zod-utils.js";
 
 /**
  * Semver regex — MAJOR.MINOR.PATCH with optional prerelease/build metadata.
@@ -253,20 +254,18 @@ export function toToolDefinition(tool: MaterializedTool): ToolDefinition {
  * Leverages Zod's built-in JSON schema generation.
  */
 function zodToJson(schema: z.ZodType): Record<string, unknown> {
-  // Use Zod's built-in method if available (Zod 3.23+)
   if ("_def" in schema) {
-    const def = (schema as unknown as { _def: Record<string, unknown> })._def;
+    const def = getZodDef(schema);
 
     // ZodObject — most common case for tool parameters
     if (def.typeName === "ZodObject") {
-      const shape = (schema as unknown as { shape: Record<string, z.ZodType> })
-        .shape;
+      const shape = getZodShape(schema);
       const properties: Record<string, unknown> = {};
       const required: string[] = [];
 
       for (const [key, value] of Object.entries(shape)) {
         properties[key] = zodToJson(value as z.ZodType);
-        if (!isOptional(value as z.ZodType)) {
+        if (!isOptionalSchema(value as z.ZodType)) {
           required.push(key);
         }
       }
@@ -345,13 +344,4 @@ function zodToJson(schema: z.ZodType): Record<string, unknown> {
 
   // Fallback
   return { type: "object" };
-}
-
-function isOptional(schema: z.ZodType): boolean {
-  const def = (schema as unknown as { _def: Record<string, unknown> })._def;
-  return (
-    def.typeName === "ZodOptional" ||
-    def.typeName === "ZodDefault" ||
-    (def.typeName === "ZodNullable" && isOptional(def.innerType as z.ZodType))
-  );
 }

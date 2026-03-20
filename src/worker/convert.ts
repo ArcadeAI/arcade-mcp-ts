@@ -5,6 +5,7 @@
 import type { z } from "zod";
 import type { ToolAuthorization } from "../auth/types.js";
 import type { MaterializedTool } from "../types.js";
+import { getZodDef, getZodShape, unwrapOptional } from "../zod-utils.js";
 import type {
   WorkerInputParameter,
   WorkerToolAuthRequirement,
@@ -47,22 +48,19 @@ export function toWorkerToolDefinition(
  * Convert Zod schema to Python-compatible InputParameter array.
  */
 function zodToInputParameters(schema: z.ZodType): WorkerInputParameter[] {
-  const def = (schema as unknown as { _def: Record<string, unknown> })._def;
+  const def = getZodDef(schema);
   if (def.typeName !== "ZodObject") return [];
 
-  const shape = (schema as unknown as { shape: Record<string, z.ZodType> })
-    .shape;
+  const shape = getZodShape(schema);
   const params: WorkerInputParameter[] = [];
 
   for (const [key, value] of Object.entries(shape)) {
-    const { innerSchema, optional } = unwrapOptional(value as z.ZodType);
-    const innerDef = (
-      innerSchema as unknown as { _def: Record<string, unknown> }
-    )._def;
+    const { innerSchema, isOptional } = unwrapOptional(value as z.ZodType);
+    const innerDef = getZodDef(innerSchema);
 
     params.push({
       name: key,
-      required: !optional,
+      required: !isOptional,
       description: (innerDef.description as string) ?? null,
       value_schema: zodToValueSchema(innerSchema),
       inferrable: true,
@@ -76,7 +74,7 @@ function zodToInputParameters(schema: z.ZodType): WorkerInputParameter[] {
  * Convert a single Zod type to a Python ValueSchema.
  */
 function zodToValueSchema(schema: z.ZodType): WorkerValueSchema {
-  const def = (schema as unknown as { _def: Record<string, unknown> })._def;
+  const def = getZodDef(schema);
 
   // Unwrap wrappers
   if (
@@ -121,8 +119,7 @@ function zodToValueSchema(schema: z.ZodType): WorkerValueSchema {
 
   if (def.typeName === "ZodArray") {
     const itemSchema = zodToValueSchema(def.type as z.ZodType);
-    const innerDef = (def.type as unknown as { _def: Record<string, unknown> })
-      ._def;
+    const innerDef = getZodDef(def.type as z.ZodType);
     const isJsonItem = innerDef.typeName === "ZodObject";
 
     return {
@@ -154,8 +151,7 @@ function zodToValueSchema(schema: z.ZodType): WorkerValueSchema {
 function zodToObjectProperties(
   schema: z.ZodType,
 ): Record<string, WorkerValueSchema> {
-  const shape = (schema as unknown as { shape: Record<string, z.ZodType> })
-    .shape;
+  const shape = getZodShape(schema);
   if (!shape) return {};
 
   const props: Record<string, WorkerValueSchema> = {};
@@ -164,29 +160,6 @@ function zodToObjectProperties(
     props[key] = zodToValueSchema(innerSchema);
   }
   return props;
-}
-
-/**
- * Unwrap ZodOptional/ZodDefault/ZodNullable to get the inner schema.
- */
-function unwrapOptional(schema: z.ZodType): {
-  innerSchema: z.ZodType;
-  optional: boolean;
-} {
-  const def = (schema as unknown as { _def: Record<string, unknown> })._def;
-
-  if (def.typeName === "ZodOptional") {
-    return { innerSchema: def.innerType as z.ZodType, optional: true };
-  }
-  if (def.typeName === "ZodDefault") {
-    return { innerSchema: def.innerType as z.ZodType, optional: true };
-  }
-  if (def.typeName === "ZodNullable") {
-    const inner = unwrapOptional(def.innerType as z.ZodType);
-    return { innerSchema: inner.innerSchema, optional: inner.optional };
-  }
-
-  return { innerSchema: schema, optional: false };
 }
 
 /**

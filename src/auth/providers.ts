@@ -17,86 +17,29 @@ function createOAuth2Provider(
   };
 }
 
-export function Asana(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("asana", opts);
-}
+const provider =
+  (id: string) =>
+  (opts?: ProviderOptions): ToolAuthorization =>
+    createOAuth2Provider(id, opts);
 
-export function Atlassian(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("atlassian", opts);
-}
-
-export function Attio(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("attio", opts);
-}
-
-export function ClickUp(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("clickup", opts);
-}
-
-export function Discord(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("discord", opts);
-}
-
-export function Dropbox(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("dropbox", opts);
-}
-
-export function Figma(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("figma", opts);
-}
-
-export function GitHub(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("github", opts);
-}
-
-export function Google(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("google", opts);
-}
-
-export function Hubspot(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("hubspot", opts);
-}
-
-export function Linear(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("linear", opts);
-}
-
-export function LinkedIn(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("linkedin", opts);
-}
-
-export function Microsoft(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("microsoft", opts);
-}
-
-export function Notion(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("notion", opts);
-}
-
-export function PagerDuty(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("pagerduty", opts);
-}
-
-export function Reddit(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("reddit", opts);
-}
-
-export function Slack(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("slack", opts);
-}
-
-export function Spotify(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("spotify", opts);
-}
-
-export function Twitch(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("twitch", opts);
-}
-
-export function X(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("x", opts);
-}
-
-export function Zoom(opts?: ProviderOptions): ToolAuthorization {
-  return createOAuth2Provider("zoom", opts);
-}
+export const Asana = provider("asana");
+export const Atlassian = provider("atlassian");
+export const Attio = provider("attio");
+export const ClickUp = provider("clickup");
+export const Discord = provider("discord");
+export const Dropbox = provider("dropbox");
+export const Figma = provider("figma");
+export const GitHub = provider("github");
+export const Google = provider("google");
+export const Hubspot = provider("hubspot");
+export const Linear = provider("linear");
+export const LinkedIn = provider("linkedin");
+export const Microsoft = provider("microsoft");
+export const Notion = provider("notion");
+export const PagerDuty = provider("pagerduty");
+export const Reddit = provider("reddit");
+export const Slack = provider("slack");
+export const Spotify = provider("spotify");
+export const Twitch = provider("twitch");
+export const X = provider("x");
+export const Zoom = provider("zoom");
