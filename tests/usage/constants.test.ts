@@ -1,15 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { isTrackingEnabled } from "../../src/usage/constants.js";
+import { withCleanEnv } from "../helpers.js";
 
 describe("isTrackingEnabled", () => {
-  const originalEnv = process.env.ARCADE_USAGE_TRACKING;
+  const { restore } = withCleanEnv();
 
   afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env.ARCADE_USAGE_TRACKING;
-    } else {
-      process.env.ARCADE_USAGE_TRACKING = originalEnv;
-    }
+    restore();
   });
 
   it("returns true when env var is not set", () => {

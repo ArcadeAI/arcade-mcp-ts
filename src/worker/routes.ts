@@ -63,44 +63,55 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
     }
   }
 
+  function unauthorizedResponse(): Response {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  async function withOptionalSpan<T>(
+    spanName: string,
+    attributes: Record<string, string>,
+    fn: () => T | Promise<T>,
+  ): Promise<T> {
+    const tracer = telemetry?.enabled
+      ? telemetry.getTracer("arcade-mcp-worker")
+      : undefined;
+    if (!tracer) return fn();
+    return tracer.startActiveSpan(spanName, async (span) => {
+      span.setAttributes(attributes);
+      try {
+        return await fn();
+      } catch (err) {
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        if (err instanceof Error) span.recordException(err);
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
   // GET /worker/tools — list available tools (returns bare array like Python)
   app.get("/tools", async ({ request }) => {
     if (!(await validateWorkerAuth(request))) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      return unauthorizedResponse();
     }
 
-    const getCatalog = (): WorkerToolDefinition[] => {
+    return withOptionalSpan("Catalog", {}, () => {
       const tools: WorkerToolDefinition[] = [];
       for (const tool of catalog.getAll()) {
         tools.push(toWorkerToolDefinition(tool));
       }
       return tools;
-    };
-
-    const tracer = telemetry?.enabled
-      ? telemetry.getTracer("arcade-mcp-worker")
-      : undefined;
-    if (!tracer) return getCatalog();
-
-    return tracer.startActiveSpan("Catalog", (span) => {
-      try {
-        return getCatalog();
-      } finally {
-        span.end();
-      }
     });
   });
 
   // POST /worker/tools/invoke — execute a tool
   app.post("/tools/invoke", async ({ request }) => {
     if (!(await validateWorkerAuth(request))) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      return unauthorizedResponse();
     }
 
     const body = (await request.json()) as WorkerToolCallRequest;
@@ -224,31 +235,11 @@ export function createWorkerRoutes(options: WorkerRoutesOptions): Elysia<any> {
       return response;
     };
 
-    const tracer = telemetry?.enabled
-      ? telemetry.getTracer("arcade-mcp-worker")
-      : undefined;
-
-    if (!tracer) return invokeInner();
-
-    return tracer.startActiveSpan("CallTool", async (span) => {
-      span.setAttributes({
-        tool_name: fqn,
-        toolkit_name: tool.name,
-        environment,
-      });
-      try {
-        const response = await invokeInner();
-        return response;
-      } catch (err) {
-        span.setStatus({ code: SpanStatusCode.ERROR });
-        if (err instanceof Error) {
-          span.recordException(err);
-        }
-        throw err;
-      } finally {
-        span.end();
-      }
-    });
+    return withOptionalSpan(
+      "CallTool",
+      { tool_name: fqn, toolkit_name: tool.name, environment },
+      invokeInner,
+    );
   });
 
   // GET /worker/health — health check

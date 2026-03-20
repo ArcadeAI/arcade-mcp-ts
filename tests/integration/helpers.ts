@@ -46,6 +46,7 @@ export async function startHttpServer(
   runtime: "bun" | "node",
   serverPath: string,
   port: number,
+  extraEnv?: Record<string, string>,
 ): Promise<ChildProcess> {
   const { command, args } = runtimeCommand(runtime, serverPath);
   const proc = spawn(command, args, {
@@ -53,6 +54,7 @@ export async function startHttpServer(
       ...process.env,
       ARCADE_SERVER_TRANSPORT: "http",
       ARCADE_SERVER_PORT: String(port),
+      ...extraEnv,
     },
     stdio: "pipe",
   });

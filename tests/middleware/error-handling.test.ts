@@ -1,29 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { ErrorHandlingMiddleware } from "../../src/middleware/error-handling.js";
-import type { MiddlewareContext } from "../../src/types.js";
-
-function makeContext(method = "tools/call"): MiddlewareContext {
-  return {
-    method,
-    params: {},
-    source: "client",
-    type: "request",
-    timestamp: new Date(),
-    requestId: "req-1",
-    metadata: {},
-  };
-}
+import { makeMiddlewareContext } from "../helpers.js";
 
 describe("ErrorHandlingMiddleware", () => {
   it("passes through on success", async () => {
     const mw = new ErrorHandlingMiddleware();
-    const result = await mw.handle(makeContext(), async () => "ok");
+    const result = await mw.handle(makeMiddlewareContext(), async () => "ok");
     expect(result).toBe("ok");
   });
 
   it("catches errors in onCallTool and returns error result", async () => {
     const mw = new ErrorHandlingMiddleware();
-    const ctx = makeContext("tools/call");
+    const ctx = makeMiddlewareContext({ method: "tools/call" });
 
     const result = (await mw.handle(ctx, async () => {
       throw new Error("tool broke");
@@ -35,7 +23,7 @@ describe("ErrorHandlingMiddleware", () => {
 
   it("masks error details when configured", async () => {
     const mw = new ErrorHandlingMiddleware(true);
-    const ctx = makeContext("tools/call");
+    const ctx = makeMiddlewareContext({ method: "tools/call" });
 
     const result = (await mw.handle(ctx, async () => {
       throw new Error("sensitive details here");
@@ -47,7 +35,7 @@ describe("ErrorHandlingMiddleware", () => {
 
   it("returns -32602 for TypeError", async () => {
     const mw = new ErrorHandlingMiddleware();
-    const ctx = makeContext("ping");
+    const ctx = makeMiddlewareContext({ method: "ping" });
 
     const result = (await mw.handle(ctx, async () => {
       throw new TypeError("bad type");
@@ -58,7 +46,7 @@ describe("ErrorHandlingMiddleware", () => {
 
   it("returns -32603 for unknown errors", async () => {
     const mw = new ErrorHandlingMiddleware();
-    const ctx = makeContext("ping");
+    const ctx = makeMiddlewareContext({ method: "ping" });
 
     const result = (await mw.handle(ctx, async () => {
       throw new Error("something");

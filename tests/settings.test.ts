@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { loadSettings } from "../src/settings.js";
+import { withCleanEnv } from "./helpers.js";
 
 describe("loadSettings", () => {
-  const originalEnv = { ...process.env };
+  const { restore } = withCleanEnv();
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restore();
   });
 
   it("returns defaults", () => {

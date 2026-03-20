@@ -325,35 +325,16 @@ export class Prompts extends ContextComponent {
 }
 
 /**
- * Sub-facade for tool list change notifications.
+ * Sub-facade for entity-specific list change notifications.
  */
-class _NotificationsTools {
-  constructor(private parent: Notifications) {}
+class _NotificationSubFacade {
+  constructor(
+    private parent: Notifications,
+    private method: string,
+  ) {}
 
   async listChanged(): Promise<void> {
-    this.parent.enqueue("notifications/tools/list_changed");
-  }
-}
-
-/**
- * Sub-facade for resource list change notifications.
- */
-class _NotificationsResources {
-  constructor(private parent: Notifications) {}
-
-  async listChanged(): Promise<void> {
-    this.parent.enqueue("notifications/resources/list_changed");
-  }
-}
-
-/**
- * Sub-facade for prompt list change notifications.
- */
-class _NotificationsPrompts {
-  constructor(private parent: Notifications) {}
-
-  async listChanged(): Promise<void> {
-    this.parent.enqueue("notifications/prompts/list_changed");
+    this.parent.enqueue(this.method);
   }
 }
 
@@ -368,17 +349,26 @@ class _NotificationsPrompts {
  * Notifications are deduplicated and flushed in batch at end of request.
  */
 export class Notifications extends ContextComponent {
-  readonly tools: _NotificationsTools;
-  readonly resources: _NotificationsResources;
-  readonly prompts: _NotificationsPrompts;
+  readonly tools: _NotificationSubFacade;
+  readonly resources: _NotificationSubFacade;
+  readonly prompts: _NotificationSubFacade;
 
   private _queue = new Set<string>();
 
   constructor(ctx: Context) {
     super(ctx);
-    this.tools = new _NotificationsTools(this);
-    this.resources = new _NotificationsResources(this);
-    this.prompts = new _NotificationsPrompts(this);
+    this.tools = new _NotificationSubFacade(
+      this,
+      "notifications/tools/list_changed",
+    );
+    this.resources = new _NotificationSubFacade(
+      this,
+      "notifications/resources/list_changed",
+    );
+    this.prompts = new _NotificationSubFacade(
+      this,
+      "notifications/prompts/list_changed",
+    );
   }
 
   /**

@@ -53,20 +53,29 @@ export class RequestManager {
     }
   }
 
+  private async executeRequest<T>(
+    methodName: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    this.guardClosed();
+    try {
+      return await fn();
+    } catch (err) {
+      if (this._closed) throw new SessionError("Session closed during request");
+      throw new ServerRequestError(`${methodName} request failed`, {
+        cause: err instanceof Error ? err : undefined,
+      });
+    }
+  }
+
   async createMessage(
     server: Server,
     params: CreateMessageRequest["params"],
     options?: RequestOptions,
   ): Promise<CreateMessageResult | CreateMessageResultWithTools> {
-    this.guardClosed();
-    try {
-      return await server.createMessage(params, options);
-    } catch (err) {
-      if (this._closed) throw new SessionError("Session closed during request");
-      throw new ServerRequestError("sampling/createMessage request failed", {
-        cause: err instanceof Error ? err : undefined,
-      });
-    }
+    return this.executeRequest("sampling/createMessage", () =>
+      server.createMessage(params, options),
+    );
   }
 
   async elicitInput(
@@ -74,15 +83,9 @@ export class RequestManager {
     params: ElicitRequestFormParams | ElicitRequestURLParams,
     options?: RequestOptions,
   ): Promise<ElicitResult> {
-    this.guardClosed();
-    try {
-      return await server.elicitInput(params, options);
-    } catch (err) {
-      if (this._closed) throw new SessionError("Session closed during request");
-      throw new ServerRequestError("elicitation/create request failed", {
-        cause: err instanceof Error ? err : undefined,
-      });
-    }
+    return this.executeRequest("elicitation/create", () =>
+      server.elicitInput(params, options),
+    );
   }
 
   async listRoots(
@@ -90,15 +93,9 @@ export class RequestManager {
     params?: ListRootsRequest["params"],
     options?: RequestOptions,
   ): Promise<{ roots: Array<{ uri: string; name?: string }> }> {
-    this.guardClosed();
-    try {
-      return await server.listRoots(params, options);
-    } catch (err) {
-      if (this._closed) throw new SessionError("Session closed during request");
-      throw new ServerRequestError("roots/list request failed", {
-        cause: err instanceof Error ? err : undefined,
-      });
-    }
+    return this.executeRequest("roots/list", () =>
+      server.listRoots(params, options),
+    );
   }
 
   close(): void {
@@ -145,34 +142,29 @@ export class NotificationManager {
     );
   }
 
-  async notifyToolListChanged(sessionIds?: string[]): Promise<void> {
+  private async notifyListChanged(
+    entity: "tools" | "resources" | "prompts",
+    sessionIds?: string[],
+  ): Promise<void> {
     await this.broadcast(
       {
-        method: "notifications/tools/list_changed",
+        method: `notifications/${entity}/list_changed`,
         params: {},
       } as ServerNotification,
       sessionIds,
     );
+  }
+
+  async notifyToolListChanged(sessionIds?: string[]): Promise<void> {
+    return this.notifyListChanged("tools", sessionIds);
   }
 
   async notifyResourceListChanged(sessionIds?: string[]): Promise<void> {
-    await this.broadcast(
-      {
-        method: "notifications/resources/list_changed",
-        params: {},
-      } as ServerNotification,
-      sessionIds,
-    );
+    return this.notifyListChanged("resources", sessionIds);
   }
 
   async notifyPromptListChanged(sessionIds?: string[]): Promise<void> {
-    await this.broadcast(
-      {
-        method: "notifications/prompts/list_changed",
-        params: {},
-      } as ServerNotification,
-      sessionIds,
-    );
+    return this.notifyListChanged("prompts", sessionIds);
   }
 }
 

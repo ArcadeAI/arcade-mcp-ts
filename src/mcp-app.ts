@@ -384,26 +384,29 @@ export class MCPApp {
 }
 
 /**
+ * Get the running server or throw if not started yet.
+ */
+function requireServer(app: MCPApp, entity: string): ArcadeMCPServer {
+  if (!app.server) {
+    throw new ServerError(
+      `Server not started. Call app.run() before managing runtime ${entity}.`,
+    );
+  }
+  return app.server;
+}
+
+/**
  * Runtime tools API — add/update/remove tools after server is running.
  */
 class ToolsAPI {
   constructor(private app: MCPApp) {}
-
-  private requireServer(): ArcadeMCPServer {
-    if (!this.app.server) {
-      throw new ServerError(
-        "Server not started. Call app.run() before managing runtime tools.",
-      );
-    }
-    return this.app.server;
-  }
 
   add<T extends z.ZodType>(
     name: string,
     options: ToolOptions<T>,
     handler: ToolHandler<z.infer<T>>,
   ): void {
-    const server = this.requireServer();
+    const server = requireServer(this.app, "tools");
     const now = new Date();
     const tool: MaterializedTool = {
       name,
@@ -435,17 +438,8 @@ class ToolsAPI {
 class PromptsAPI {
   constructor(private app: MCPApp) {}
 
-  private requireServer(): ArcadeMCPServer {
-    if (!this.app.server) {
-      throw new ServerError(
-        "Server not started. Call app.run() before managing runtime prompts.",
-      );
-    }
-    return this.app.server;
-  }
-
   add(name: string, options: PromptOptions, handler?: PromptHandler): void {
-    const server = this.requireServer();
+    const server = requireServer(this.app, "prompts");
     this.app.promptManager.addPrompt(name, options, handler);
     server.addPrompt(name, options, handler);
   }
@@ -470,17 +464,8 @@ class PromptsAPI {
 class ResourcesAPI {
   constructor(private app: MCPApp) {}
 
-  private requireServer(): ArcadeMCPServer {
-    if (!this.app.server) {
-      throw new ServerError(
-        "Server not started. Call app.run() before managing runtime resources.",
-      );
-    }
-    return this.app.server;
-  }
-
   add(uri: string, options: ResourceOptions, handler?: ResourceHandler): void {
-    const server = this.requireServer();
+    const server = requireServer(this.app, "resources");
     const name = uri;
     this.app.resourceManager.addResource(uri, name, options, handler);
     server.addResource(uri, name, options, handler);
