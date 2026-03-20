@@ -1,6 +1,6 @@
 {
   "name": "@arcadeai/arcade-mcp",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "TypeScript MCP framework with secret injection, OAuth auth providers, multi-user support, worker routes, and middleware",
   "type": "module",
   "bin": {
@@ -47,6 +47,7 @@
     "@types/node": "^25.5.0",
     "dotenv": "^17.3.1",
     "openai": "^4.96.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.0"
   },

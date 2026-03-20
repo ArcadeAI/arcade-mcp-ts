@@ -1,47 +1,24 @@
-import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
-
-async function waitForServer(url: string, timeoutMs = 10000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      // Use GET which returns 405 — proves the server is listening
-      // without creating an MCP session
-      await fetch(url);
-      return;
-    } catch {
-      await new Promise((r) => setTimeout(r, 100));
-    }
-  }
-  throw new Error(`Server did not start within ${timeoutMs}ms`);
-}
+import { startHttpServer } from "./helpers.js";
 
 function startEchoServer(port: number) {
   const serverPath = resolve(
     import.meta.dirname,
     "../../examples/echo/server.ts",
   );
-  return spawn("bun", ["run", serverPath], {
-    env: {
-      ...process.env,
-      ARCADE_SERVER_TRANSPORT: "http",
-      ARCADE_SERVER_PORT: String(port),
-    },
-    stdio: "pipe",
-  });
+  return startHttpServer("bun", serverPath, port);
 }
 
 describe("HTTP integration", () => {
   it("connects to echo server over HTTP and calls tools", async () => {
     const port = 9000 + Math.floor(Math.random() * 1000);
-    const serverProcess = startEchoServer(port);
+    const serverProcess = await startEchoServer(port);
 
     try {
       const baseUrl = `http://127.0.0.1:${port}`;
-      await waitForServer(`${baseUrl}/mcp`);
 
       const transport = new StreamableHTTPClientTransport(
         new URL(`${baseUrl}/mcp`),
@@ -97,11 +74,10 @@ describe("HTTP integration", () => {
 
   it("supports multiple concurrent sessions", async () => {
     const port = 9000 + Math.floor(Math.random() * 1000);
-    const serverProcess = startEchoServer(port);
+    const serverProcess = await startEchoServer(port);
 
     try {
       const baseUrl = `http://127.0.0.1:${port}`;
-      await waitForServer(`${baseUrl}/mcp`);
 
       const makeClient = async (name: string) => {
         const transport = new StreamableHTTPClientTransport(
