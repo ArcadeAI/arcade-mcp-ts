@@ -303,6 +303,16 @@ export class ArcadeMCPServer {
     const executeInner = async (): Promise<CallToolResult> => {
       const toolCtxData = this.buildToolContext(tool);
 
+      // Warn about missing secrets
+      if (tool.secrets && tool.secrets.length > 0) {
+        const missing = tool.secrets.filter((s) => !(s in toolCtxData.secrets));
+        if (missing.length > 0) {
+          _logger.warn(
+            `Tool "${tool.fullyQualifiedName}" missing required secrets: [${missing.join(", ")}]`,
+          );
+        }
+      }
+
       // Resolve auth token if needed
       if (tool.auth && !toolCtxData.authToken) {
         _logger.debug(
@@ -313,8 +323,8 @@ export class ArcadeMCPServer {
           toolCtxData.userId,
         );
         if (authResult.error) {
-          _logger.debug(
-            `Auth resolution for "${tool.fullyQualifiedName}" returned error to client`,
+          _logger.warn(
+            `Tool "${tool.fullyQualifiedName}" auth failed (provider=${tool.auth.providerId})`,
           );
           return authResult.error;
         }
