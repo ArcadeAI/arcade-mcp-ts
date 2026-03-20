@@ -5,21 +5,7 @@ import {
   Middleware,
 } from "../../src/middleware/base.js";
 import type { CallNext, MiddlewareContext } from "../../src/types.js";
-
-function makeContext(
-  overrides?: Partial<MiddlewareContext>,
-): MiddlewareContext {
-  return {
-    method: "tools/call",
-    params: {},
-    source: "client",
-    type: "request",
-    timestamp: new Date(),
-    requestId: "req-1",
-    metadata: {},
-    ...overrides,
-  };
-}
+import { makeMiddlewareContext } from "../helpers.js";
 
 class TrackingMiddleware extends Middleware {
   calls: string[] = [];
@@ -50,7 +36,7 @@ describe("Middleware", () => {
     class NoopMiddleware extends Middleware {}
 
     const mw = new NoopMiddleware();
-    const ctx = makeContext();
+    const ctx = makeMiddlewareContext();
     const handler = vi.fn(async () => "result");
 
     const result = await mw.handle(ctx, handler);
@@ -60,7 +46,7 @@ describe("Middleware", () => {
 
   it("calls method-specific hooks for tools/call", async () => {
     const mw = new TrackingMiddleware();
-    const ctx = makeContext({ method: "tools/call" });
+    const ctx = makeMiddlewareContext({ method: "tools/call" });
     const handler = vi.fn(async () => "result");
 
     await mw.handle(ctx, handler);
@@ -73,7 +59,7 @@ describe("Middleware", () => {
 
   it("does not call onCallTool for tools/list", async () => {
     const mw = new TrackingMiddleware();
-    const ctx = makeContext({ method: "tools/list" });
+    const ctx = makeMiddlewareContext({ method: "tools/list" });
     const handler = vi.fn(async () => "result");
 
     await mw.handle(ctx, handler);
@@ -131,7 +117,7 @@ describe("applyMiddleware", () => {
       },
     );
 
-    const result = await chain(makeContext());
+    const result = await chain(makeMiddlewareContext());
     expect(result).toBe("result");
     expect(order).toEqual([
       "first:before",
@@ -146,7 +132,7 @@ describe("applyMiddleware", () => {
     const handler = vi.fn(async () => "result");
     const chain = applyMiddleware([], handler);
 
-    const result = await chain(makeContext());
+    const result = await chain(makeMiddlewareContext());
     expect(result).toBe("result");
     expect(handler).toHaveBeenCalled();
   });

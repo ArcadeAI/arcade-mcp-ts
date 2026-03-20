@@ -4,7 +4,7 @@
  */
 import type { z } from "zod";
 import type { ToolAuthorization } from "../auth/types.js";
-import { type MaterializedTool, TOOL_NAME_SEPARATOR } from "../types.js";
+import type { MaterializedTool } from "../types.js";
 import type {
   WorkerInputParameter,
   WorkerToolAuthRequirement,
@@ -79,11 +79,12 @@ function zodToValueSchema(schema: z.ZodType): WorkerValueSchema {
   const def = (schema as unknown as { _def: Record<string, unknown> })._def;
 
   // Unwrap wrappers
-  if (def.typeName === "ZodOptional" || def.typeName === "ZodNullable") {
-    return zodToValueSchema(def.innerType as z.ZodType);
-  }
-  if (def.typeName === "ZodDefault") {
-    return zodToValueSchema(def.innerType as z.ZodType);
+  if (
+    def.typeName === "ZodOptional" ||
+    def.typeName === "ZodNullable" ||
+    def.typeName === "ZodDefault"
+  ) {
+    return zodToValueSchema(unwrapOptional(schema).innerSchema);
   }
 
   if (def.typeName === "ZodString") {

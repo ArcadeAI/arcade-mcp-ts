@@ -92,14 +92,8 @@ export class HTTPSessionManager {
     this.ttlTimers.clear();
 
     // Close all sessions
-    const closePromises = [...this.sessions.entries()].map(
-      async ([id, entry]) => {
-        this.sessions.delete(id);
-        entry.session.close();
-        this.server.unregisterSession(id);
-        await entry.transport.close().catch(() => {});
-        await entry.mcpServer.close().catch(() => {});
-      },
+    const closePromises = [...this.sessions.entries()].flatMap(([id, entry]) =>
+      this.cleanupSession(id, entry),
     );
     await Promise.all(closePromises);
   }
@@ -237,6 +231,20 @@ export class HTTPSessionManager {
     this.ttlTimers.set(sessionId, timer);
   }
 
+  /**
+   * Shared session teardown: unregisters, closes transport + mcpServer.
+   * Returns close promises so callers can optionally await them.
+   */
+  private cleanupSession(id: string, entry: SessionEntry): Promise<void>[] {
+    this.sessions.delete(id);
+    entry.session.close();
+    this.server.unregisterSession(id);
+    return [
+      entry.transport.close().catch(() => {}),
+      entry.mcpServer.close().catch(() => {}),
+    ];
+  }
+
   private evictSession(sessionId: string): void {
     const timer = this.ttlTimers.get(sessionId);
     if (timer) {
@@ -246,11 +254,7 @@ export class HTTPSessionManager {
 
     const entry = this.sessions.get(sessionId);
     if (entry) {
-      this.sessions.delete(sessionId);
-      entry.session.close();
-      this.server.unregisterSession(sessionId);
-      entry.transport.close().catch(() => {});
-      entry.mcpServer.close().catch(() => {});
+      this.cleanupSession(sessionId, entry);
       logger.debug({ sessionId }, "Session evicted");
     }
   }

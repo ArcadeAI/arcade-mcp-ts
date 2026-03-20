@@ -127,17 +127,17 @@ export class ArcadeMCPServer {
    */
   registerCatalogTools(): void {
     for (const tool of this.catalog.getAll()) {
-      this.registerTool(tool);
+      this.registerToolOn(this.mcpServer, tool);
     }
   }
 
   /**
-   * Register a single tool with the McpServer, wrapping the handler
+   * Register a single tool on the given McpServer target, wrapping the handler
    * to inject Context and apply middleware.
    */
-  private registerTool(tool: MaterializedTool): void {
+  private registerToolOn(target: McpServer, tool: MaterializedTool): void {
     const config = createMcpToolConfig(tool);
-    this.mcpServer.registerTool(
+    target.registerTool(
       tool.fullyQualifiedName,
       {
         title: config.title,
@@ -587,7 +587,7 @@ export class ArcadeMCPServer {
    * Add a tool at runtime.
    */
   addTool(tool: MaterializedTool): void {
-    this.registerTool(tool);
+    this.registerToolOn(this.mcpServer, tool);
   }
 
   // ── Prompt registration ──────────────────────────────────
@@ -598,14 +598,15 @@ export class ArcadeMCPServer {
   registerCatalogPrompts(): void {
     if (!this.promptManager) return;
     for (const prompt of this.promptManager.listPrompts()) {
-      this.registerPrompt(prompt.name, prompt);
+      this.registerPromptOn(this.mcpServer, prompt.name, prompt);
     }
   }
 
   /**
-   * Register a single prompt with the McpServer.
+   * Register a single prompt on the given McpServer target.
    */
-  private registerPrompt(
+  private registerPromptOn(
+    target: McpServer,
     name: string,
     stored: {
       description?: string;
@@ -634,7 +635,7 @@ export class ArcadeMCPServer {
       config.argsSchema = argsSchema;
     }
 
-    this.mcpServer.registerPrompt(
+    target.registerPrompt(
       name,
       config as never,
       (async (args: Record<string, string>) => {
@@ -651,7 +652,7 @@ export class ArcadeMCPServer {
     options: PromptOptions,
     _handler?: PromptHandler,
   ): void {
-    this.registerPrompt(name, {
+    this.registerPromptOn(this.mcpServer, name, {
       description: options.description,
       arguments: options.arguments,
     });
@@ -665,19 +666,25 @@ export class ArcadeMCPServer {
   registerCatalogResources(): void {
     if (!this.resourceManager) return;
     for (const resource of this.resourceManager.listResources()) {
-      this.registerResource(resource.uri, resource.name, resource);
+      this.registerResourceOn(
+        this.mcpServer,
+        resource.uri,
+        resource.name,
+        resource,
+      );
     }
   }
 
   /**
-   * Register a single resource with the McpServer.
+   * Register a single resource on the given McpServer target.
    */
-  private registerResource(
+  private registerResourceOn(
+    target: McpServer,
     uri: string,
     name: string,
     stored: { description?: string; mimeType?: string },
   ): void {
-    this.mcpServer.registerResource(
+    target.registerResource(
       name,
       uri,
       { description: stored.description, mimeType: stored.mimeType } as never,
@@ -696,7 +703,7 @@ export class ArcadeMCPServer {
     options: ResourceOptions,
     _handler?: ResourceHandler,
   ): void {
-    this.registerResource(uri, name, {
+    this.registerResourceOn(this.mcpServer, uri, name, {
       description: options.description,
       mimeType: options.mimeType,
     });
@@ -730,62 +737,18 @@ export class ArcadeMCPServer {
     );
 
     for (const tool of this.catalog.getAll()) {
-      const config = createMcpToolConfig(tool);
-      session.registerTool(
-        tool.fullyQualifiedName,
-        {
-          title: config.title,
-          description: config.description,
-          inputSchema: tool.parameters as never,
-          annotations: config.annotations,
-          _meta: config._meta,
-        },
-        (async (args: Record<string, unknown>, extra: ServerExtra) => {
-          return this.executeTool(tool, args, extra);
-        }) as never,
-      );
+      this.registerToolOn(session, tool);
     }
 
     if (this.promptManager) {
       for (const prompt of this.promptManager.listPrompts()) {
-        const argsSchema: Record<string, z.ZodType> = {};
-        if (prompt.arguments) {
-          for (const arg of prompt.arguments) {
-            const base = arg.description
-              ? z.string().describe(arg.description)
-              : z.string();
-            argsSchema[arg.name] = arg.required ? base : base.optional();
-          }
-        }
-        const config: Record<string, unknown> = {
-          description: prompt.description,
-        };
-        if (Object.keys(argsSchema).length > 0) {
-          config.argsSchema = argsSchema;
-        }
-        session.registerPrompt(
-          prompt.name,
-          config as never,
-          (async (args: Record<string, string>) => {
-            return this.promptManager!.getPrompt(prompt.name, args);
-          }) as never,
-        );
+        this.registerPromptOn(session, prompt.name, prompt);
       }
     }
 
     if (this.resourceManager) {
       for (const resource of this.resourceManager.listResources()) {
-        session.registerResource(
-          resource.name,
-          resource.uri,
-          {
-            description: resource.description,
-            mimeType: resource.mimeType,
-          } as never,
-          (async (resourceUri: URL) => {
-            return this.resourceManager!.readResource(resourceUri.href);
-          }) as never,
-        );
+        this.registerResourceOn(session, resource.uri, resource.name, resource);
       }
     }
 

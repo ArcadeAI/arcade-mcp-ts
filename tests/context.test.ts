@@ -4,16 +4,7 @@ import {
   getCurrentContext,
   setCurrentContext,
 } from "../src/context.js";
-
-function makeExtra() {
-  return {
-    signal: new AbortController().signal,
-    requestId: "req-123",
-    sessionId: "session-456",
-    sendNotification: async () => {},
-    sendRequest: async () => ({}),
-  } as never;
-}
+import { makeExtra } from "./helpers.js";
 
 describe("Context", () => {
   it("creates with defaults", () => {

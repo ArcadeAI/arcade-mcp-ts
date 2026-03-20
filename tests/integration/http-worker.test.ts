@@ -1,7 +1,6 @@
-import { spawn } from "node:child_process";
-import { resolve } from "node:path";
 import * as jose from "jose";
 import { describe, expect, it } from "vitest";
+import { examplePath, startHttpServer } from "./helpers.js";
 
 const WORKER_SECRET = "integration-test-secret";
 const SECRET_KEY = new TextEncoder().encode(WORKER_SECRET);
@@ -15,45 +14,20 @@ async function createWorkerJWT(): Promise<string> {
     .sign(SECRET_KEY);
 }
 
-async function waitForServer(url: string, timeoutMs = 10000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      await fetch(url);
-      return;
-    } catch {
-      await new Promise((r) => setTimeout(r, 100));
-    }
-  }
-  throw new Error(`Server did not start within ${timeoutMs}ms`);
-}
-
-function startEchoServer(port: number, env?: Record<string, string>) {
-  const serverPath = resolve(
-    import.meta.dirname,
-    "../../examples/echo/server.ts",
-  );
-  return spawn("bun", ["run", serverPath], {
-    env: {
-      ...process.env,
-      ARCADE_SERVER_TRANSPORT: "http",
-      ARCADE_SERVER_PORT: String(port),
-      ...env,
-    },
-    stdio: "pipe",
-  });
-}
-
 describe("HTTP worker route integration", () => {
   it("mounts worker routes when ARCADE_WORKER_SECRET is set", async () => {
     const port = 9000 + Math.floor(Math.random() * 1000);
-    const serverProcess = startEchoServer(port, {
-      ARCADE_WORKER_SECRET: WORKER_SECRET,
-    });
+    const serverProcess = await startHttpServer(
+      "bun",
+      examplePath("echo"),
+      port,
+      {
+        ARCADE_WORKER_SECRET: WORKER_SECRET,
+      },
+    );
 
     try {
       const baseUrl = `http://127.0.0.1:${port}`;
-      await waitForServer(`${baseUrl}/mcp`);
 
       // Health endpoint should be accessible without auth
       const healthRes = await fetch(`${baseUrl}/worker/health`);
@@ -89,13 +63,17 @@ describe("HTTP worker route integration", () => {
   it("does NOT mount worker routes when ARCADE_WORKER_SECRET is unset", async () => {
     const port = 9000 + Math.floor(Math.random() * 1000);
     // Explicitly unset the secret
-    const serverProcess = startEchoServer(port, {
-      ARCADE_WORKER_SECRET: "",
-    });
+    const serverProcess = await startHttpServer(
+      "bun",
+      examplePath("echo"),
+      port,
+      {
+        ARCADE_WORKER_SECRET: "",
+      },
+    );
 
     try {
       const baseUrl = `http://127.0.0.1:${port}`;
-      await waitForServer(`${baseUrl}/mcp`);
 
       // Worker health should 404 since routes are not mounted
       const healthRes = await fetch(`${baseUrl}/worker/health`);

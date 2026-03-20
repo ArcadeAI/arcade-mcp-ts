@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { Context } from "../src/context.js";
 import {
   FatalToolError,
   RetryableToolError,
@@ -8,21 +7,7 @@ import {
 } from "../src/errors.js";
 import { handleToolError, runTool } from "../src/executor.js";
 import type { MaterializedTool } from "../src/types.js";
-
-function makeContext(): Context {
-  return new Context(
-    {
-      signal: new AbortController().signal,
-      requestId: "test-req",
-      sendNotification: async () => {},
-      sendRequest: async () => ({}),
-    } as never,
-    {
-      requestId: "test-req",
-      toolContext: { secrets: { MY_KEY: "secret123" }, metadata: {} },
-    },
-  );
-}
+import { makeTestContext } from "./helpers.js";
 
 function makeTool(
   // biome-ignore lint/suspicious/noExplicitAny: test helper
@@ -43,7 +28,7 @@ function makeTool(
 describe("runTool", () => {
   it("succeeds with valid input", async () => {
     const tool = makeTool(async (args) => args.message);
-    const ctx = makeContext();
+    const ctx = makeTestContext();
 
     const result = await runTool(tool, { message: "hello" }, ctx);
     expect(result.success).toBe(true);
@@ -52,7 +37,7 @@ describe("runTool", () => {
 
   it("returns validation error for invalid input", async () => {
     const tool = makeTool(async (args) => args.message);
-    const ctx = makeContext();
+    const ctx = makeTestContext();
 
     const result = await runTool(tool, { message: 42 }, ctx);
     expect(result.success).toBe(false);
@@ -61,7 +46,7 @@ describe("runTool", () => {
 
   it("returns error for missing required field", async () => {
     const tool = makeTool(async (args) => args.message);
-    const ctx = makeContext();
+    const ctx = makeTestContext();
 
     const result = await runTool(tool, {}, ctx);
     expect(result.success).toBe(false);
@@ -72,7 +57,7 @@ describe("runTool", () => {
     const tool = makeTool(async () => {
       throw new RetryableToolError("try again", { retryAfterMs: 1000 });
     });
-    const ctx = makeContext();
+    const ctx = makeTestContext();
 
     const result = await runTool(tool, { message: "hello" }, ctx);
     expect(result.success).toBe(false);
@@ -84,7 +69,7 @@ describe("runTool", () => {
     const tool = makeTool(async () => {
       throw new FatalToolError("kaboom");
     });
-    const ctx = makeContext();
+    const ctx = makeTestContext();
 
     const result = await runTool(tool, { message: "hello" }, ctx);
     expect(result.success).toBe(false);
@@ -96,7 +81,7 @@ describe("runTool", () => {
     const tool = makeTool(async () => {
       throw new Error("surprise!");
     });
-    const ctx = makeContext();
+    const ctx = makeTestContext();
 
     const result = await runTool(tool, { message: "hello" }, ctx);
     expect(result.success).toBe(false);
@@ -108,7 +93,7 @@ describe("runTool", () => {
     const tool = makeTool(async (_args, ctx) => {
       return ctx.getSecret("MY_KEY");
     });
-    const ctx = makeContext();
+    const ctx = makeTestContext();
 
     const result = await runTool(tool, { message: "hello" }, ctx);
     expect(result.success).toBe(true);
@@ -119,7 +104,7 @@ describe("runTool", () => {
     const tool = makeTool(async () => {
       return { starred: true, repo: "owner/repo" };
     });
-    const ctx = makeContext();
+    const ctx = makeTestContext();
 
     const result = await runTool(tool, { message: "hello" }, ctx);
     expect(result.success).toBe(true);
