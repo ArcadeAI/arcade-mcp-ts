@@ -245,7 +245,7 @@ export class HTTPSessionManager {
     ];
   }
 
-  private evictSession(sessionId: string): void {
+  private async evictSession(sessionId: string): Promise<void> {
     const timer = this.ttlTimers.get(sessionId);
     if (timer) {
       clearTimeout(timer);
@@ -254,7 +254,7 @@ export class HTTPSessionManager {
 
     const entry = this.sessions.get(sessionId);
     if (entry) {
-      this.cleanupSession(sessionId, entry);
+      await Promise.all(this.cleanupSession(sessionId, entry));
       logger.debug({ sessionId }, "Session evicted");
     }
   }
@@ -267,7 +267,7 @@ export class HTTPSessionManager {
       await this.creationLock;
     }
 
-    let resolve: () => void;
+    let resolve: (() => void) | undefined;
     this.creationLock = new Promise<void>((r) => {
       resolve = r;
     });
@@ -276,7 +276,7 @@ export class HTTPSessionManager {
       return await fn();
     } finally {
       this.creationLock = null;
-      resolve!();
+      resolve?.();
     }
   }
 }

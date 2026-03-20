@@ -1,3 +1,5 @@
+import { NotFoundError } from "../exceptions.js";
+
 /**
  * Subscriber callback for registry change notifications.
  */
@@ -57,7 +59,7 @@ export class ComponentRegistry<K, V> {
   remove(key: K): V {
     const value = this.items.get(key);
     if (value === undefined) {
-      throw new Error(`Key not found in registry`);
+      throw new NotFoundError(`Key not found in registry`);
     }
     this.items.delete(key);
     this._version++;

@@ -74,8 +74,18 @@ export async function startHttp(
           },
         });
       }
+      const token = authHeader.slice(7);
+      if (!token) {
+        return new Response(JSON.stringify({ error: "Missing Bearer token" }), {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+            "WWW-Authenticate": "Bearer",
+          },
+        });
+      }
       try {
-        resourceOwner = await options.auth.validateToken(authHeader.slice(7));
+        resourceOwner = await options.auth.validateToken(token);
       } catch {
         return new Response(JSON.stringify({ error: "Invalid token" }), {
           status: 401,

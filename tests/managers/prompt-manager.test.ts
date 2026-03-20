@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NotFoundError, PromptError } from "../../src/exceptions.js";
 import { PromptManager } from "../../src/managers/prompt-manager.js";
 
 describe("PromptManager", () => {
@@ -67,11 +68,21 @@ describe("PromptManager", () => {
     );
   });
 
-  it("throws when getting non-existent prompt", async () => {
+  it("throws NotFoundError when getting non-existent prompt", async () => {
     const pm = new PromptManager();
+    await expect(pm.getPrompt("missing")).rejects.toThrow(NotFoundError);
     await expect(pm.getPrompt("missing")).rejects.toThrow(
       "Prompt 'missing' not found",
     );
+  });
+
+  it("throws PromptError when missing required argument", async () => {
+    const pm = new PromptManager();
+    pm.addPrompt("greet", {
+      description: "Greet",
+      arguments: [{ name: "name", required: true }],
+    });
+    await expect(pm.getPrompt("greet", {})).rejects.toThrow(PromptError);
   });
 
   it("uses default handler returning description message", async () => {

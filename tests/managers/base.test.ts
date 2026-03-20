@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { NotFoundError } from "../../src/exceptions.js";
 import { ComponentRegistry } from "../../src/managers/base.js";
 
 describe("ComponentRegistry", () => {
@@ -45,8 +46,9 @@ describe("ComponentRegistry", () => {
     expect(reg.version).toBe(3);
   });
 
-  it("throws on removing non-existent key", () => {
+  it("throws NotFoundError on removing non-existent key", () => {
     const reg = new ComponentRegistry<string, string>();
+    expect(() => reg.remove("missing")).toThrow(NotFoundError);
     expect(() => reg.remove("missing")).toThrow("Key not found");
   });
 

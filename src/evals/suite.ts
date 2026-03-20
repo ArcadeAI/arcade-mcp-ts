@@ -1,4 +1,5 @@
 import type { ToolCatalog } from "../catalog.js";
+import { ServerError } from "../exceptions.js";
 import { EvalCase } from "./case.js";
 import type { Critic } from "./critics.js";
 import { EvalToolRegistry } from "./tool-registry.js";
@@ -244,7 +245,7 @@ function buildAnthropicMessages(evalCase: EvalCase): {
 
 function detectProvider(client: unknown): ProviderName {
   if (client == null) {
-    throw new Error("Client is required");
+    throw new ServerError("Client is required");
   }
 
   const clientObj = client as Record<string, unknown>;
@@ -255,7 +256,7 @@ function detectProvider(client: unknown): ProviderName {
   // Anthropic client has `messages` property
   if ("messages" in clientObj) return "anthropic";
 
-  throw new Error(
+  throw new ServerError(
     "Could not detect provider from client. Pass `provider` explicitly.",
   );
 }

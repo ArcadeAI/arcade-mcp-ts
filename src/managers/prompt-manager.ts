@@ -1,4 +1,5 @@
 import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
+import { NotFoundError, PromptError } from "../exceptions.js";
 import type { PromptArgument, PromptHandler, PromptOptions } from "../types.js";
 import { ComponentRegistry } from "./base.js";
 
@@ -50,14 +51,14 @@ export class PromptManager {
   ): Promise<GetPromptResult> {
     const stored = this.registry.get(name);
     if (!stored) {
-      throw new Error(`Prompt '${name}' not found`);
+      throw new NotFoundError(`Prompt '${name}' not found`);
     }
 
     // Validate required arguments
     if (stored.arguments) {
       for (const arg of stored.arguments) {
         if (arg.required && (!args || !(arg.name in args))) {
-          throw new Error(
+          throw new PromptError(
             `Missing required argument '${arg.name}' for prompt '${name}'`,
           );
         }

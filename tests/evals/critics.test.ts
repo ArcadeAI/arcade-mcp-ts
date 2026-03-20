@@ -5,6 +5,7 @@ import {
   NumericCritic,
   SimilarityCritic,
 } from "../../src/evals/critics.js";
+import { ServerError } from "../../src/exceptions.js";
 
 describe("BinaryCritic", () => {
   it("matches exact strings", () => {
@@ -107,14 +108,20 @@ describe("NumericCritic", () => {
     expect(result.match).toBe(false); // threshold is 1.0
   });
 
-  it("throws on invalid range", () => {
+  it("throws ServerError on invalid range", () => {
     expect(
       () =>
         new NumericCritic({
           field: "count",
           valueRange: [100, 0],
         }),
-    ).toThrow();
+    ).toThrow(ServerError);
+  });
+
+  it("throws ServerError on negative weight", () => {
+    expect(() => new BinaryCritic({ field: "name", weight: -1 })).toThrow(
+      ServerError,
+    );
   });
 });
 
