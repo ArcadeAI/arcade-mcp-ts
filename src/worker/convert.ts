@@ -200,7 +200,7 @@ function toWorkerAuthRequirement(
     provider_id: auth.providerId ?? null,
     provider_type: auth.providerType,
     id: auth.id ?? null,
-    oauth2: auth.scopes ? { scopes: auth.scopes } : null,
+    oauth2: { scopes: auth.scopes ?? [] },
   };
 }
 
