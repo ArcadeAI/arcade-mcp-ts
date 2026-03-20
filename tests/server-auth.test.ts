@@ -41,7 +41,7 @@ function makeSettings(
     },
     telemetry: { enable: false, serviceName: "test" },
     arcade: {
-      apiKey: "test-api-key",
+      apiKey: "arc_test-api-key",
       apiUrl: "https://api.arcade.dev",
       authDisabled: false,
       environment: "dev",
@@ -65,6 +65,24 @@ function makeAuthTool(): MaterializedTool {
       providerId: "github",
       providerType: "oauth2",
       scopes: ["repo"],
+    },
+    dateAdded: new Date(),
+    dateUpdated: new Date(),
+  };
+}
+
+function makeAuthToolNoScopes(): MaterializedTool {
+  return {
+    name: "get_repo",
+    fullyQualifiedName: "github.get_repo",
+    description: "Get repo info",
+    handler: async (_args, ctx) => {
+      return { token: ctx.getAuthToken() };
+    },
+    parameters: z.object({ repo: z.string() }),
+    auth: {
+      providerId: "github",
+      providerType: "oauth2",
     },
     dateAdded: new Date(),
     dateUpdated: new Date(),
@@ -185,6 +203,31 @@ describe("ArcadeMCPServer auth resolution", () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Authorization failed");
+  });
+
+  it("sends oauth2 with empty scopes when tool has no scopes", async () => {
+    mockAuthorize.mockResolvedValue({
+      status: "completed",
+      context: { token: "ghp_noscopes" },
+    });
+
+    const server = makeServer();
+    const result = await (server as AnyServer).executeTool(
+      makeAuthToolNoScopes(),
+      { repo: "test" },
+      makeExtra(),
+    );
+
+    expect(mockAuthorize).toHaveBeenCalledOnce();
+    expect(mockAuthorize).toHaveBeenCalledWith({
+      user_id: "test-user",
+      auth_requirement: {
+        provider_id: "github",
+        provider_type: "oauth2",
+        oauth2: { scopes: [] },
+      },
+    });
+    expect(result.isError).toBeUndefined();
   });
 
   it("skips auth resolution for tools without auth", async () => {
