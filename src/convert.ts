@@ -50,6 +50,30 @@ export function createMcpToolConfig(tool: MaterializedTool): McpToolConfig {
 }
 
 /**
+ * Convert a ToolAuthorization to the Python-compatible wire format
+ * used in `_meta.arcade.requirements.authorization`.
+ *
+ * Mapping:
+ *   providerId  → provider_id
+ *   providerType → provider_type
+ *   id          → id
+ *   scopes      → oauth2.scopes  (nested under provider type key)
+ */
+function toWireAuthorization(
+  auth: import("./auth/types.js").ToolAuthorization,
+): Record<string, unknown> {
+  const wire: Record<string, unknown> = {
+    provider_id: auth.providerId,
+    provider_type: auth.providerType,
+  };
+  if (auth.id !== undefined) wire.id = auth.id;
+  if (auth.scopes?.length) {
+    wire[auth.providerType] = { scopes: auth.scopes };
+  }
+  return wire;
+}
+
+/**
  * Build the `_meta.arcade` structure from a MaterializedTool's
  * requirements (auth, secrets, metadata) and behavioral metadata.
  *
@@ -62,7 +86,7 @@ export function buildArcadeMeta(
 
   // Requirements
   const requirements: Record<string, unknown> = {};
-  if (tool.auth) requirements.authorization = tool.auth;
+  if (tool.auth) requirements.authorization = toWireAuthorization(tool.auth);
   if (tool.secrets?.length) requirements.secrets = tool.secrets;
   if (tool.metadata && Object.keys(tool.metadata).length > 0)
     requirements.metadata = tool.metadata;

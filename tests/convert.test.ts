@@ -102,9 +102,9 @@ describe("createMcpToolConfig", () => {
       arcade: {
         requirements: {
           authorization: {
-            providerId: "github",
-            providerType: "oauth2",
-            scopes: ["repo"],
+            provider_id: "github",
+            provider_type: "oauth2",
+            oauth2: { scopes: ["repo"] },
           },
         },
       },
@@ -151,9 +151,9 @@ describe("createMcpToolConfig", () => {
     expect(config._meta?.arcade).toEqual({
       requirements: {
         authorization: {
-          providerId: "github",
-          providerType: "oauth2",
-          scopes: ["repo"],
+          provider_id: "github",
+          provider_type: "oauth2",
+          oauth2: { scopes: ["repo"] },
         },
         secrets: ["TOKEN"],
       },
@@ -184,9 +184,49 @@ describe("buildArcadeMeta", () => {
 
     expect(meta?.requirements).toEqual({
       authorization: {
-        providerId: "google",
-        providerType: "oauth2",
-        scopes: ["email"],
+        provider_id: "google",
+        provider_type: "oauth2",
+        oauth2: { scopes: ["email"] },
+      },
+    });
+  });
+
+  it("includes authorization without scopes (no oauth2 key)", () => {
+    const meta = buildArcadeMeta(
+      makeTool({
+        auth: {
+          providerId: "github",
+          providerType: "oauth2",
+        },
+      }),
+    );
+
+    expect(meta?.requirements).toEqual({
+      authorization: {
+        provider_id: "github",
+        provider_type: "oauth2",
+      },
+    });
+  });
+
+  it("includes authorization with id field", () => {
+    const meta = buildArcadeMeta(
+      makeTool({
+        auth: {
+          providerId: "google",
+          providerType: "oauth2",
+          id: "my-google",
+          scopes: ["email"],
+        },
+      }),
+    );
+
+    expect(meta?.requirements).toEqual({
+      authorization: {
+        provider_id: "google",
+        provider_type: "oauth2",
+        id: "my-google",
+        oauth2: { scopes: ["email"] },
       },
     });
   });

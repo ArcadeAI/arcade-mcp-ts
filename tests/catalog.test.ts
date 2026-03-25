@@ -372,9 +372,9 @@ describe("toToolDefinition with convert metadata", () => {
       arcade: {
         requirements: {
           authorization: {
-            providerId: "github",
-            providerType: "oauth2",
-            scopes: ["repo"],
+            provider_id: "github",
+            provider_type: "oauth2",
+            oauth2: { scopes: ["repo"] },
           },
           secrets: ["GH_TOKEN"],
         },
