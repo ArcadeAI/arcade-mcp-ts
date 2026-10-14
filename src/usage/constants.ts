@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 export const POSTHOG_API_KEY =
-  "phc_hIqUQyJpf2TP4COePO5jEpkGeUXipa7KqTEyDeRsTmB";
+  "phc_zNHKkPFsrKVSpd7y85jnxW8jNVW6AQD6AwqE4nWjwpXg";
 export const POSTHOG_HOST = "https://us.i.posthog.com";
 
 export const EVENT_MCP_SERVER_STARTED = "mcp_server_started";
